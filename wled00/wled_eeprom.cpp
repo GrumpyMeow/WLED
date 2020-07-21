@@ -284,6 +284,12 @@ void saveSettingsToEEPROM()
   } // last used: 2549. maybe leave a few bytes for future expansion and go on with 2600 kthxbye.
   #endif
 
+  #ifdef WLED_ENABLE_SOUND
+    EEPROM.write(2600, soundEnabled);
+    EEPROM.write(2601, sampleRate);
+  #endif
+
+
   commit();
 }
 
@@ -535,6 +541,16 @@ void loadSettingsFromEEPROM(bool first)
   if (lastEEPROMversion > 19)
   {
     e131ProxyUniverse = EEPROM.read(2185) + ((EEPROM.read(2186) << 8) & 0xFF00);
+  }
+  #endif
+
+  #ifdef WLED_ENABLE_SOUND
+  if (lastEEPROMversion > 19)
+  {
+      #ifdef WLED_ENABLE_SOUND
+      soundEnabled = EEPROM.read(2600);
+      sampleRate = EEPROM.read(2601);
+      #endif
   }
   #endif
 

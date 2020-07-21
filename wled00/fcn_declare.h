@@ -41,6 +41,10 @@ void colorRGBtoRGBW(byte* rgb); //rgb to rgbw (http://codewelt.com/rgbw). (RGBW_
 void initDMX();
 void handleDMX();
 
+//sound.cpp
+void initSound();
+void handleSound();
+
 //e131.cpp
 void handleE131Packet(e131_packet_t* p, IPAddress clientIP, bool isArtnet);
 

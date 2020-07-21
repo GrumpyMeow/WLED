@@ -110,7 +110,7 @@
 #define NL_MODE_SUN               3            //Sunrise/sunset. Target brightness is set immediately, then Sunrise effect is started. Max 60 min.
 
 //EEPROM size
-#define EEPSIZE 2560  //Maximum is 4096
+#define EEPSIZE 2610  //Maximum is 4096
 
 #define NTP_PACKET_SIZE 48
 

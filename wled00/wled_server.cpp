@@ -86,7 +86,7 @@ void initServer()
 
   server.on("/settings/dmx", HTTP_POST, [](AsyncWebServerRequest *request){
     handleSettingsSet(request, 7);
-    serveMessage(request, 200,F("UI settings saved."),"Redirecting...",1);
+    serveMessage(request, 200,F("DMX settings saved."),"Redirecting...",1);
   });
 
   server.on("/settings/sync", HTTP_POST, [](AsyncWebServerRequest *request){
@@ -103,6 +103,11 @@ void initServer()
     handleSettingsSet(request, 6);
     if (!doReboot) serveMessage(request, 200,F("Security settings saved."),F("Rebooting, please wait ~10 seconds..."),129);
     doReboot = true;
+  });
+
+  server.on("/settings/sound", HTTP_POST, [](AsyncWebServerRequest *request){
+    handleSettingsSet(request, 8);
+    serveMessage(request, 200,F("Sound settings saved."),F("Redirecting..."),1);
   });
 
   server.on("/json", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -222,6 +227,7 @@ void initServer()
       serveMessage(request, 501, "Not implemented", F("DMX support is not enabled in this build."), 254);
     });
     #endif
+
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     if (captivePortal(request)) return;
     serveIndexOrWelcome(request);
@@ -332,8 +338,8 @@ String settingsProcessor(const String& var)
   if (var == "DMXMENU") {
     return String(F("<form action=/settings/dmx><button type=submit>DMX Output</button></form>"));
   }
-  
   #endif
+
   if (var == "SCSS") return String(FPSTR(PAGE_settingsCss));
   return String();
 }
@@ -374,6 +380,9 @@ void serveSettings(AsyncWebServerRequest* request)
     #ifdef WLED_ENABLE_DMX // include only if DMX is enabled
     else if (url.indexOf("dmx")  > 0) subPage = 7;
     #endif
+    #ifdef WLED_ENABLE_SOUND // include only if SOUND is enabled
+    else if (url.indexOf("sound")  > 0) subPage = 8;
+    #endif
   } else subPage = 255; //welcome page
 
   if (subPage == 1 && wifiLock && otaLock)
@@ -396,6 +405,7 @@ void serveSettings(AsyncWebServerRequest* request)
     case 5:   request->send_P(200, "text/html", PAGE_settings_time, settingsProcessor); break;
     case 6:   request->send_P(200, "text/html", PAGE_settings_sec , settingsProcessor); break;
     case 7:   request->send_P(200, "text/html", PAGE_settings_dmx , settingsProcessor); break;
+    case 8:   request->send_P(200, "text/html", PAGE_settings_sound , settingsProcessor); break;
     case 255: request->send_P(200, "text/html", PAGE_welcome); break;
     default:  request->send_P(200, "text/html", PAGE_settings     , settingsProcessor); 
   }

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+	<meta name="viewport" content="width=500">
+	<title>Sound Settings</title>
+	<script>
+		function H()
+		{
+			window.open("https://github.com/Aircoookie/WLED/wiki/Settings#sound-settings");
+		}
+		function B()
+		{
+			window.open("/settings","_self");
+		}
+		function GetV()
+		{
+			var d = document;
+		}
+	</script>
+	<style>
+		@import url("style.css");
+	</style>
+</head>
+<body onload="GetV()">
+	<form id="form_s" name="Sf" method="post">
+		<div class="helpB"><button type="button" onclick="H()">?</button></div>
+		<button type="button" onclick="B()">Back</button><button type="submit">Save</button><hr>
+		<h2>Sound setup</h2>
+		<h3>Sound settings</h3>
+		Enable: <input type="checkbox" name="SE"><br>
+		Sample-rate: 
+		<select name="SR">
+			<option value="0" selected>44100 Hz</option>
+			<option value="1">22050 Hz</option>
+			<option value="2">11025 Hz</option>
+			<option value="3">8000 Hz</option>
+			<option value="4">5512 Hz</option>
+			<option value="5">1000 Hz</option>
+		</select><br>
+		Frequency bands: 
+		<select name="SF">
+			<option value="0" selected>16</option>
+			<option value="1">32</option>
+			<option value="2">64</option>
+			<option value="3">128</option>
+			<option value="4">256</option>
+			<option value="5">512</option>
+		</select><br>
+		<button type="button" onclick="B()">Back</button><button type="submit">Save</button>
+	</form>
+</body>
+</html>

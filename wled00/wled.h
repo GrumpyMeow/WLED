@@ -30,6 +30,7 @@
 #endif
 #define WLED_ENABLE_ADALIGHT       // saves 500b only
 //#define WLED_ENABLE_DMX          // uses 3.5kb (use LEDPIN other than 2)
+//#define WLED_ENABLE_SOUND          // ?
 //#define WLED_ENABLE_WEBSOCKETS
 
 #define WLED_DISABLE_FILESYSTEM        // SPIFFS is not used by any WLED feature yet
@@ -81,6 +82,10 @@
 
 #ifdef WLED_ENABLE_DMX
   #include "src/dependencies/dmx/ESPDMX.h"
+#endif
+
+#ifdef WLED_ENABLE_SOUND
+  #include "src/dependencies/cqt/CQT.h"
 #endif
 
 #include "src/dependencies/e131/ESPAsyncE131.h"
@@ -295,6 +300,11 @@ WLED_GLOBAL byte macroButton _INIT(0), macroLongPress _INIT(0), macroDoublePress
 WLED_GLOBAL bool otaLock     _INIT(false);  // prevents OTA firmware updates without password. ALWAYS enable if system exposed to any public networks
 WLED_GLOBAL bool wifiLock    _INIT(false);  // prevents access to WiFi settings when OTA lock is enabled
 WLED_GLOBAL bool aOtaEnabled _INIT(true);   // ArduinoOTA allows easy updates directly from the IDE. Careful, it does not auto-disable when OTA lock is on
+
+#ifdef WLED_ENABLE_SOUND
+WLED_GLOBAL bool soundEnabled _INIT(false); 
+WLED_GLOBAL uint16_t sampleRate _INIT(11025); 
+#endif
 
 WLED_GLOBAL uint16_t userVar0 _INIT(0), userVar1 _INIT(0); //available for use in usermod
 

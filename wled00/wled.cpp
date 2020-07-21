@@ -53,6 +53,9 @@ void WLED::loop()
 #ifdef WLED_ENABLE_DMX
   handleDMX();
 #endif
+#ifdef WLED_ENABLE_SOUND
+  handleSound();
+#endif
   userLoop();
   usermods.loop();
 
@@ -217,6 +220,9 @@ void WLED::setup()
 #endif
 #ifdef WLED_ENABLE_DMX
   initDMX();
+#endif
+#ifdef WLED_ENABLE_SOUND
+  initSound();
 #endif
   // HTTP server page init
   initServer();

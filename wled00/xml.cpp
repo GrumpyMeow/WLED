@@ -210,7 +210,7 @@ void getSettingsJS(byte subPage, char* dest)
   obuf = dest;
   olen = 0;
 
-  if (subPage <1 || subPage >7) return;
+  if (subPage <1 || subPage >8) return;
 
   if (subPage == 1) {
     sappends('s',"CS",clientSSID);
@@ -479,6 +479,14 @@ void getSettingsJS(byte subPage, char* dest)
     sappend('i',"CH14",DMXFixtureMap[13]);
     sappend('i',"CH15",DMXFixtureMap[14]);
     }
+  #endif
+
+  #ifdef WLED_ENABLE_SOUND // include only if SOUND is enabled
+  if (subPage == 8)
+  {
+    sappend('c',"SE",soundEnabled);
+    sappend('i',"SR",sampleRate);
+  }
   #endif
   oappend("}</script>");
 }
