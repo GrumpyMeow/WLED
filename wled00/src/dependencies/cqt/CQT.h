@@ -21,19 +21,21 @@
 class CQT {
 public:
   void init(uint FrequencyBands, uint SampleRate, uint BlockSize);
-  int * calculate(int32_t *signal);
+  void calculate(int inputsignal[], int outputsignal[]);
 private:
+  unsigned int nrInterrupts;
+  uint NRSAMPLES;
+  uint MAXTOTALSAMPLES;
   uint32_t lowfreq_endIndex = 0;
   uint32_t amplitude;			// amplification of signal
   unsigned fixedpoint twoPiQ;	// 2*pi*Q value for the CQT (Constant Q Transform)
   unsigned int FrequencyBands; // Number of frequency bands
   unsigned int SampleRate; // Sample rate in Herz
-  unsigned int BlockSize; // Block size of sampled data
   unsigned int * Div;	// sample frequency divider for each filter
   unsigned int * BandFrequency; // Frequency edges of bands
   unsigned int * NyqistFrequency; // Nyqist frequencies per band
+  int * signal;     // current sample signal
   int * signal_lowfreq;	// current sample signal, with a lower samplin frequency (see LOWFREQDIV)
-  int * Output;
   unsigned int lowFreqBound; // Lower frequency bound
   unsigned int highFreqBound; // Higher frequency bound
   unsigned int minFreq; 

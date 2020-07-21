@@ -1,7 +1,7 @@
 #include "wled.h"
 #include "src/dependencies/cqt/CQT.h"
 
-#define SamplingFrequency 11025
+#define SamplingFrequency 44100
 #define BlockSize 1024  // In number of samples (1024 is maximum of esp-idf)
 #define FrequencyBands 16 // Number of frequency bands
 
@@ -21,6 +21,9 @@
     #ifdef WLED_SOUND_INMP441
 
     int32_t i2sBuffer[BlockSize];
+    int inputsignal[BlockSize];
+    int outputsignal[FrequencyBands];
+    uint32_t maxAmp = 1 ;
 
     const i2s_port_t I2S_PORT = I2S_NUM_0; // Select I2S Port number 0
       const i2s_config_t i2s_config = {
@@ -49,22 +52,27 @@
 
 CQT *cqt;
 
-void process() {
-    int* output = cqt->calculate(i2sBuffer);
-    for (int i=0;i<FrequencyBands;i++) {
-        Serial.printf("%d\t" , output[i]);
-    }
-    Serial.println();
-}
-
 void handleSound()
 {
     // Read data from microphone
     size_t num_bytes_read;
-    esp_err_t err = i2s_read(I2S_PORT, &i2sBuffer, sizeof(i2sBuffer), &num_bytes_read, 0);
+    esp_err_t err = i2s_read(I2S_PORT, &i2sBuffer, sizeof(i2sBuffer), &num_bytes_read, portMAX_DELAY);
     if (err == ESP_OK && num_bytes_read != 0) {
-        process();
-    }  
+        for (int i=0;i<BlockSize;i++) {
+            int32_t sample = i2sBuffer[i];
+            int32_t amp = sample;
+            if (amp<0) amp = -amp;
+            if (amp>maxAmp) maxAmp = amp;
+            float normalizedSample = sample / (maxAmp/512.0f);
+            inputsignal[i] = normalizedSample;
+        }
+        
+        cqt->calculate(inputsignal, outputsignal);
+        for (int i=0;i<FrequencyBands;i++) {
+            Serial.printf("%d\t" , outputsignal[i]);
+        }
+        Serial.println();
+    } 
 }
 
 void initSound() {
@@ -89,6 +97,6 @@ void initSound() {
 }
 
 #else
-void handleSound() {}
-void initSound() {}
+    void handleSound() {}
+    void initSound() {}
 #endif

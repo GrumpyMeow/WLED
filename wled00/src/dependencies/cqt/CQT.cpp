@@ -9,20 +9,28 @@
 void CQT::init(uint FrequencyBands, uint SampleRate, uint BlockSize) {
     this->FrequencyBands = FrequencyBands;
 	this->SampleRate = SampleRate;
-	this->BlockSize = BlockSize;
+	this->MAXTOTALSAMPLES = BlockSize * 2;
+	this->NRSAMPLES = BlockSize;
+
+	this->nrInterrupts = 0;
 
     Div = new unsigned int[FrequencyBands];
 	BandFrequency = new unsigned int[FrequencyBands+1];
 	NyqistFrequency = new unsigned int[FrequencyBands];
-	Output = new int[FrequencyBands];
-	signal_lowfreq = new int[BlockSize];
+	signal = new int[NRSAMPLES];
+	signal_lowfreq = new int[NRSAMPLES];
+
+	for (uint k = 0; k < NRSAMPLES; ++k) {
+	    signal[k] = 0;		
+		signal_lowfreq[k] = 0;
+    }
 
     // TODO: initialize everything decently to avoid division by 0 errors and other problems
     for (uint k = 0; k < FrequencyBands; ++k) {
 	    Div[k] = 1;		
     }
 
-	amplitude = 1024;
+	amplitude = 512;	// Range 0 -- 1024
     lowFreqBound = 20;
     highFreqBound = SampleRate >> 1; // Nyqist frequency
 
@@ -66,19 +74,20 @@ void CQT::calculateParameters(uint minFreq, uint maxFreq) {
     float nn = powf(2, log(Fmax / (double) Fmin) / log(2) / FrequencyBands);
     twoPiQ = int2PI * (nn + 1) / (nn - 1) / 2;
 
+	int i;
     // Calculating the border frequencies...
-    for (int i = 0; i < FrequencyBands + 1; ++i) {
+    for (i = 0; i < FrequencyBands + 1; ++i) {
 		BandFrequency[i] = (Fmin * powf(nn, i) + Fmax / powf(nn, FrequencyBands - i)) / 2;
     }
 
     // Calculating the index until which the signal_lowfreq samples should be used
     lowfreq_endIndex = 0;
-    while (SampleRate / (BandFrequency[lowfreq_endIndex + 1] - BandFrequency[lowfreq_endIndex]) >= BlockSize && lowfreq_endIndex < FrequencyBands) {
+    while (SampleRate / (BandFrequency[lowfreq_endIndex + 1] - BandFrequency[lowfreq_endIndex]) >= NRSAMPLES && lowfreq_endIndex < FrequencyBands) {
 		++lowfreq_endIndex;
     }
-    uint samplesLeft = BlockSize;
 
-	uint i;
+    int samplesLeft = MAXTOTALSAMPLES;
+
     // Calculating sample frequency dividers...
     for (i = FrequencyBands; i > lowfreq_endIndex; --i) {
 		Div[i - 1] = 1 + SampleRate / ((BandFrequency[i] - BandFrequency[i - 1]) * samplesLeft / i);
@@ -91,7 +100,7 @@ void CQT::calculateParameters(uint minFreq, uint maxFreq) {
 		samplesLeft -= NyqistFrequency[i - 1];
     }
 
-	for (i=0;i<FrequencyBands;i++) {
+	for (int i=0;i<FrequencyBands;i++) {
 		Serial.printf("%d Div=%d NyqistFreq=%d BandFrequency=%d\n",i , Div[i], NyqistFrequency[i], BandFrequency[i]);
 	}
 
@@ -130,44 +139,47 @@ fixedpoint CQT::hamming(int m, int k) {
     return ALPHA - (BETA * approxCos(int2PI * m / NyqistFrequency[k]) >> PRECISION);
 }
 
-int* CQT::calculate(int32_t *signal) {
+// signal values should be in range -512 ... +512
+void CQT::calculate(int inputsignal[], int outputsignal[]) {
     unsigned int k, i, indx;
     int windowed, angle;
     float real_f, imag_f;
     fixedpoint real, imag;
-	
-	for (uint nrInterrupts=0;nrInterrupts<8;nrInterrupts++) {
-		for (k = 0; k < lowfreq_endIndex; ++k) {
-			indx = nrInterrupts % BlockSize - 1 + 8 * BlockSize;
-			real = ALPHA - (BETA * signal_lowfreq[indx % BlockSize] >> PRECISION);
-			imag = 0;
-			for (i = 1; i < NyqistFrequency[k]; ++i) {
-				windowed = hamming(i, k) * signal_lowfreq[(indx - i * Div[k]) % BlockSize];
-				angle = twoPiQ * i / NyqistFrequency[k];
-				real += windowed * approxCos(angle) >> PRECISION;
-				imag += windowed * approxSin(angle) >> PRECISION;
-			}
 
-			real_f = real / (float) SCALE;
-			imag_f = imag / (float) SCALE;
-			BandFrequency[k] = logf(powf(real_f * real_f + imag_f * imag_f, 0.5) / NyqistFrequency[k] + 0.1) * amplitude / 32;
-		}
-		for (; k < FrequencyBands; ++k) {
-			indx = nrInterrupts % BlockSize - 1 + 8 * BlockSize;
-			real = ALPHA - (BETA * signal[indx % BlockSize] >> PRECISION);
-			imag = 0;
-			for (i = 1; i < NyqistFrequency[k]; ++i) {
-				windowed = hamming(i, k) * signal[(indx - i * Div[k]) % BlockSize];
-				angle = twoPiQ * i / NyqistFrequency[k];
-				real += windowed * approxCos(angle) >> PRECISION;
-				imag += windowed * approxSin(angle) >> PRECISION;
-			}
-			real_f = real / (float) SCALE;
-			imag_f = imag / (float) SCALE;
-			Output[k] = logf(powf(real_f * real_f + imag_f * imag_f, 0.5) / NyqistFrequency[k] + 0.1) * amplitude / 32;
+	for (int counter=0;counter<NRSAMPLES;counter++) {
+		++nrInterrupts;
+		signal[nrInterrupts % NRSAMPLES ] = inputsignal[counter];
+		signal_lowfreq[(nrInterrupts / LOWFREQDIV) % NRSAMPLES ] = inputsignal[counter];
+	}
+
+	for (k = 0; k < lowfreq_endIndex; ++k) {
+		indx = nrInterrupts % NRSAMPLES - 1 + 8 * NRSAMPLES;
+		real = ALPHA - (BETA * signal_lowfreq[indx % NRSAMPLES] >> PRECISION);
+		imag = 0;
+		for (i = 1; i < NyqistFrequency[k]; ++i) {
+			windowed = hamming(i, k) * signal_lowfreq[(indx - i * Div[k]) % NRSAMPLES];
+			angle = twoPiQ * i / NyqistFrequency[k];
+			real += windowed * approxCos(angle) >> PRECISION;
+			imag += windowed * approxSin(angle) >> PRECISION;
 		}
 
-		return Output;
+		real_f = real / (float) SCALE;
+		imag_f = imag / (float) SCALE;
+		outputsignal[k] = logf(powf(real_f * real_f + imag_f * imag_f, 0.5) / NyqistFrequency[k] + 0.1) * amplitude / 32;
+	}
+	for (; k < FrequencyBands; ++k) {
+		indx = nrInterrupts % NRSAMPLES - 1 + 8 * NRSAMPLES;
+		real = ALPHA - (BETA * signal[indx % NRSAMPLES] >> PRECISION);
+		imag = 0;
+		for (i = 1; i < NyqistFrequency[k]; ++i) {
+			windowed = hamming(i, k) * signal[(indx - i * Div[k]) % NRSAMPLES];
+			angle = twoPiQ * i / NyqistFrequency[k];
+			real += windowed * approxCos(angle) >> PRECISION;
+			imag += windowed * approxSin(angle) >> PRECISION;
+		}
+		real_f = real / (float) SCALE;
+		imag_f = imag / (float) SCALE;
+		outputsignal[k] = logf(powf(real_f * real_f + imag_f * imag_f, 0.5) / NyqistFrequency[k] + 0.1) * amplitude / 32;
 	}
 }
 
