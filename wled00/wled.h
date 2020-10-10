@@ -3,12 +3,12 @@
 /*
    Main sketch, global variable declarations
    @title WLED project sketch
-   @version 0.10.1
+   @version 0.10.2
    @author Christian Schwinne
  */
 
 // version code in format yymmddb (b = daily build)
-#define VERSION 2007190
+#define VERSION 2010020
 
 // ESP8266-01 (blue) got too little storage space to work with all features of WLED. To use it, you must use ESP8266 Arduino Core v2.4.2 and the setting 512K(No SPIFFS).
 
@@ -30,9 +30,12 @@
 #endif
 #define WLED_ENABLE_ADALIGHT       // saves 500b only
 //#define WLED_ENABLE_DMX          // uses 3.5kb (use LEDPIN other than 2)
-//#define WLED_ENABLE_WEBSOCKETS
+#define WLED_ENABLE_LOXONE         // uses 1.2kb
+#ifndef WLED_DISABLE_WEBSOCKETS
+  #define WLED_ENABLE_WEBSOCKETS
+#endif
 
-#define WLED_DISABLE_FILESYSTEM        // SPIFFS is not used by any WLED feature yet
+#define WLED_DISABLE_FILESYSTEM    // SPIFFS is not used by any WLED feature yet
 //#define WLED_ENABLE_FS_SERVING   // Enable sending html file from SPIFFS before serving progmem version
 //#define WLED_ENABLE_FS_EDITOR    // enable /edit page for editing SPIFFS content. Will also be disabled with OTA lock
 
@@ -85,6 +88,8 @@
 
 #include "src/dependencies/e131/ESPAsyncE131.h"
 #include "src/dependencies/async-mqtt-client/AsyncMqttClient.h"
+
+#define ARDUINOJSON_DECODE_UNICODE 0
 #include "src/dependencies/json/AsyncJson-v6.h"
 #include "src/dependencies/json/ArduinoJson-v6.h"
 
@@ -155,8 +160,8 @@
 #endif
 
 // Global Variable definitions
-WLED_GLOBAL char versionString[] _INIT("0.10.1");
-#define WLED_CODENAME "Namigai"
+WLED_GLOBAL char versionString[] _INIT("0.10.2");
+#define WLED_CODENAME "Fumikiri"
 
 // AP and OTA default passwords (for maximum security change them!)
 WLED_GLOBAL char apPass[65]  _INIT(DEFAULT_AP_PASS);
@@ -210,6 +215,7 @@ WLED_GLOBAL bool buttonEnabled  _INIT(true);
 WLED_GLOBAL byte irEnabled      _INIT(0);     // Infrared receiver
 
 WLED_GLOBAL uint16_t udpPort    _INIT(21324); // WLED notifier default port
+WLED_GLOBAL uint16_t udpPort2   _INIT(65506); // WLED notifier supplemental port
 WLED_GLOBAL uint16_t udpRgbPort _INIT(19446); // Hyperion port
 
 WLED_GLOBAL bool receiveNotificationBrightness _INIT(true);       // apply brightness from incoming notifications
@@ -373,7 +379,7 @@ WLED_GLOBAL byte effectIntensity _INIT(128);
 WLED_GLOBAL byte effectPalette _INIT(0);
 
 // network
-WLED_GLOBAL bool udpConnected _INIT(false), udpRgbConnected _INIT(false);
+WLED_GLOBAL bool udpConnected _INIT(false), udp2Connected _INIT(false), udpRgbConnected _INIT(false);
 
 // ui style
 WLED_GLOBAL bool showWelcomePage _INIT(false);
@@ -428,7 +434,8 @@ WLED_GLOBAL byte realtimeMode _INIT(REALTIME_MODE_INACTIVE);
 WLED_GLOBAL byte realtimeOverride _INIT(REALTIME_OVERRIDE_NONE);
 WLED_GLOBAL IPAddress realtimeIP _INIT((0, 0, 0, 0));
 WLED_GLOBAL unsigned long realtimeTimeout _INIT(0);
-WLED_GLOBAL uint16_t tpmFirstFrameSize _INIT(0);
+WLED_GLOBAL uint8_t tpmPacketCount _INIT(0);
+WLED_GLOBAL uint16_t tpmPayloadFrameSize _INIT(0);
 
 // mqtt
 WLED_GLOBAL long lastMqttReconnectAttempt _INIT(0);
@@ -455,7 +462,7 @@ WLED_GLOBAL DNSServer dnsServer;
 
 // network time
 WLED_GLOBAL bool ntpConnected _INIT(false);
-WLED_GLOBAL time_t local _INIT(0);
+WLED_GLOBAL time_t localTime _INIT(0);
 WLED_GLOBAL unsigned long ntpLastSyncTime _INIT(999000000L);
 WLED_GLOBAL unsigned long ntpPacketSentTime _INIT(999000000L);
 WLED_GLOBAL IPAddress ntpServerIP;
@@ -488,7 +495,7 @@ WLED_GLOBAL AsyncClient* hueClient _INIT(NULL);
 WLED_GLOBAL AsyncMqttClient* mqtt _INIT(NULL);
 
 // udp interface objects
-WLED_GLOBAL WiFiUDP notifierUdp, rgbUdp;
+WLED_GLOBAL WiFiUDP notifierUdp, rgbUdp, notifier2Udp;
 WLED_GLOBAL WiFiUDP ntpUdp;
 WLED_GLOBAL ESPAsyncE131 e131 _INIT_N(((handleE131Packet)));
 WLED_GLOBAL bool e131NewData _INIT(false);

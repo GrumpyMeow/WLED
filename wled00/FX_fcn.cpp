@@ -81,12 +81,17 @@ void WS2812FX::service() {
       if(nowUp > SEGENV.next_time || _triggered || (doShow && SEGMENT.mode == 0)) //last is temporary
       {
         if (SEGMENT.grouping == 0) SEGMENT.grouping = 1; //sanity check
-        _virtualSegmentLength = SEGMENT.virtualLength();
         doShow = true;
-        handle_palette();
-        uint16_t delay = (this->*_mode[SEGMENT.mode])();
+        uint16_t delay = FRAMETIME;
+
+        if (!SEGMENT.getOption(SEG_OPTION_FREEZE)) { //only run effect function if not frozen
+          _virtualSegmentLength = SEGMENT.virtualLength();
+          handle_palette();
+          delay = (this->*_mode[SEGMENT.mode])(); //effect function
+          if (SEGMENT.mode != FX_MODE_HALLOWEEN_EYES) SEGENV.call++;
+        }
+
         SEGENV.next_time = nowUp + delay;
-        if (SEGMENT.mode != FX_MODE_HALLOWEEN_EYES) SEGENV.call++;
       }
     }
   }
@@ -106,16 +111,25 @@ void WS2812FX::setPixelColor(uint16_t n, uint32_t c) {
   setPixelColor(n, r, g, b, w);
 }
 
+#define REV(i) (_length - 1 - (i))
+
+//used to map from segment index to physical pixel, taking into account grouping, offsets, reverse and mirroring
 uint16_t WS2812FX::realPixelIndex(uint16_t i) {
   int16_t iGroup = i * SEGMENT.groupLength();
 
   /* reverse just an individual segment */
   int16_t realIndex = iGroup;
-  if (IS_REVERSE) realIndex = SEGMENT.length() -iGroup -1;
+  if (IS_REVERSE) {
+    if (IS_MIRROR) {
+      realIndex = (SEGMENT.length() -1) / 2 - iGroup;  //only need to index half the pixels
+    } else {
+      realIndex = SEGMENT.length() - iGroup - 1;
+    }
+  }
 
   realIndex += SEGMENT.start;
   /* Reverse the whole string */
-  if (reverseMode) realIndex = _length - 1 - realIndex;
+  if (reverseMode) realIndex = REV(realIndex);
 
   return realIndex;
 }
@@ -172,14 +186,23 @@ void WS2812FX::setPixelColor(uint16_t i, byte r, byte g, byte b, byte w)
     for (uint16_t j = 0; j < SEGMENT.grouping; j++) {
       int16_t indexSet = realIndex + (reversed ? -j : j);
       int16_t indexSetRev = indexSet;
-      if (reverseMode) indexSetRev = _length - 1 - indexSet;
+      if (reverseMode) indexSetRev = REV(indexSet);
       #ifdef WLED_CUSTOM_LED_MAPPING
       if (indexSet < customMappingSize) indexSet = customMappingTable[indexSet];
       #endif
-      if (indexSetRev >= SEGMENT.start && indexSetRev < SEGMENT.stop) bus->SetPixelColor(indexSet + skip, col);
+      if (indexSetRev >= SEGMENT.start && indexSetRev < SEGMENT.stop) {
+        bus->SetPixelColor(indexSet + skip, col);
+        if (IS_MIRROR) { //set the corresponding mirrored pixel
+          if (reverseMode) {
+            bus->SetPixelColor(REV(SEGMENT.start) - indexSet + skip + REV(SEGMENT.stop) + 1, col);
+          } else {
+            bus->SetPixelColor(SEGMENT.stop - indexSet + skip + SEGMENT.start - 1, col);
+          }
+        }
+      }
     }
   } else { //live data, etc.
-    if (reverseMode) i = _length - 1 - i;
+    if (reverseMode) i = REV(i);
     #ifdef WLED_CUSTOM_LED_MAPPING
     if (i < customMappingSize) i = customMappingTable[i];
     #endif
@@ -368,6 +391,12 @@ void WS2812FX::setBrightness(uint8_t b) {
   if (_brightness == b) return;
   _brightness = (gammaCorrectBri) ? gamma8(b) : b;
   _segment_index = 0;
+  if (b == 0) { //unfreeze all segments on power off
+    for (uint8_t i = 0; i < MAX_NUM_SEGMENTS; i++)
+    {
+      _segments[i].setOption(SEG_OPTION_FREEZE, false);
+    }
+  }
   if (SEGENV.next_time > millis() + 22 && millis() - _lastShow > MIN_SHOW_DELAY) show();//apply brightness change immediately if no refresh soon
 }
 
@@ -500,6 +529,7 @@ void WS2812FX::resetSegments() {
   _segments[0].colors[0] = DEFAULT_COLOR;
   _segments[0].start = 0;
   _segments[0].speed = DEFAULT_SPEED;
+  _segments[0].intensity = DEFAULT_INTENSITY;
   _segments[0].stop = _length;
   _segments[0].grouping = 1;
   _segments[0].setOption(SEG_OPTION_SELECTED, 1);
@@ -512,9 +542,23 @@ void WS2812FX::resetSegments() {
     _segments[i].grouping = 1;
     _segments[i].setOption(SEG_OPTION_ON, 1);
     _segments[i].opacity = 255;
+    _segments[i].speed = DEFAULT_SPEED;
+    _segments[i].intensity = DEFAULT_INTENSITY;
     _segment_runtimes[i].reset();
   }
   _segment_runtimes[0].reset();
+}
+
+//After this function is called, setPixelColor() will use that segment (offsets, grouping, ... will apply)
+void WS2812FX::setPixelSegment(uint8_t n)
+{
+  if (n < MAX_NUM_SEGMENTS) {
+    _segment_index = n;
+    _virtualSegmentLength = SEGMENT.length();
+  } else {
+    _segment_index = 0;
+    _virtualSegmentLength = 0;
+  }
 }
 
 void WS2812FX::setRange(uint16_t i, uint16_t i2, uint32_t col)
@@ -577,6 +621,14 @@ void WS2812FX::fill(uint32_t c) {
   for(uint16_t i = 0; i < SEGLEN; i++) {
     setPixelColor(i, c);
   }
+}
+
+/*
+ * Blends the specified color with the existing pixel color.
+ */
+void WS2812FX::blendPixelColor(uint16_t n, uint32_t color, uint8_t blend)
+{
+  setPixelColor(n, color_blend(getPixelColor(n), color, blend));
 }
 
 /*
@@ -645,6 +697,32 @@ uint16_t WS2812FX::triwave16(uint16_t in)
 {
   if (in < 0x8000) return in *2;
   return 0xFFFF - (in - 0x8000)*2;
+}
+
+/*
+ * Generates a tristate square wave w/ attac & decay 
+ * @param x input value 0-255
+ * @param pulsewidth 0-127 
+ * @param attdec attac & decay, max. pulsewidth / 2
+ * @returns signed waveform value
+ */
+int8_t WS2812FX::tristate_square8(uint8_t x, uint8_t pulsewidth, uint8_t attdec) {
+  int8_t a = 127;
+  if (x > 127) {
+    a = -127;
+    x -= 127;
+  }
+
+  if (x < attdec) { //inc to max
+    return (int16_t) x * a / attdec;
+  }
+  else if (x < pulsewidth - attdec) { //max
+    return a;
+  }  
+  else if (x < pulsewidth) { //dec to 0
+    return (int16_t) (pulsewidth - x) * a / attdec;
+  }
+  return 0;
 }
 
 /*
@@ -792,7 +870,7 @@ void WS2812FX::handle_palette(void)
       load_gradient_palette(paletteIndex -13);
   }
   
-  if (singleSegmentMode && paletteFade) //only blend if just one segment uses FastLED mode
+  if (singleSegmentMode && paletteFade && SEGENV.call > 0) //only blend if just one segment uses FastLED mode
   {
     nblendPaletteTowardPalette(currentPalette, targetPalette, 48);
   } else
