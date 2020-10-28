@@ -81,18 +81,40 @@ void userSetup()
 
   #ifdef ESP32
     pinMode(LED_BUILTIN, OUTPUT);
+    
+    esp_timer_create_args_t sampleTimer = {
+      .callback = sampleTimer_callback,
+      .arg = NULL,
+      .dispatch_method = ESP_TIMER_TASK,
+      .name = "sample_timer"
+    };
+    esp_timer_handle_t sampleTimerHandle;
+    ESP_ERROR_CHECK(esp_timer_create(&sampleTimer, &sampleTimerHandle));
+    uint64_t samplePeriod = 1000000 / SAMPLE_RATE ; 
+    ESP_ERROR_CHECK(esp_timer_start_periodic(sampleTimerHandle, samplePeriod));
 
-    sampling_period_us = round(1000000*(1.0/SAMPLE_RATE));
+    esp_timer_create_args_t fftTimer = {
+      .callback = fftTimer_callback,
+      .arg = NULL,
+      .dispatch_method = ESP_TIMER_TASK,
+      .name = "fft_timer"
+    };
+    esp_timer_handle_t fftTimerHandle;
+    ESP_ERROR_CHECK(esp_timer_create(&fftTimer, &fftTimerHandle));
+    uint64_t fftPeriod = 1000000 / (SAMPLE_RATE / (512/4)) ; 
+    ESP_ERROR_CHECK(esp_timer_start_periodic(fftTimerHandle, fftPeriod));
 
-    // Define the FFT Task and lock it to core 0
-    xTaskCreatePinnedToCore(
-          FFTcode,                          // Function to implement the task
-          "FFT",                            // Name of the task
-          10000,                            // Stack size in words
-          NULL,                             // Task input parameter
-          1,                                // Priority of the task
-          &FFT_Task,                        // Task handle
-          0);                               // Core where the task should run
+    esp_timer_create_args_t tadTimer = {
+      .callback = transmitADTimer_callback,
+      .arg = NULL,
+      .dispatch_method = ESP_TIMER_TASK,
+      .name = "tad_timer"
+    };
+    esp_timer_handle_t tadTimerHandle;
+    ESP_ERROR_CHECK(esp_timer_create(&tadTimer, &tadTimerHandle));
+    uint64_t tadPeriod = 1000000 / 10 ; 
+    ESP_ERROR_CHECK(esp_timer_start_periodic(tadTimerHandle, tadPeriod));
+
   #endif
 }
 
@@ -111,14 +133,14 @@ void userLoop() {
       agcAvg();                                             // Calculated the PI adjusted value as sampleAvg
       myVals[millis()%32] = sampleAgc;
       logAudio();
+
+      if (sample > soundReactiveIntensity ) {
+        soundReactiveIntensity = sample;
+      } else {
+        soundReactiveIntensity *= 0.9f; // Do some non-linear decay
+      }
+
     }
-    #ifdef ESP32
-    if (audioSyncEnabled & (1 << 0)) {
-      // Only run the transmit code IF we're in Transmit mode
-//      Serial.println("Transmitting UDP Mic Packet");
-      transmitAudioData();
-    }
-    #endif
   }
 
   // Begin UDP Microphone Sync

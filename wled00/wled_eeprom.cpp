@@ -112,6 +112,7 @@ void saveSettingsToEEPROM()
   EEPROM.write(250, receiveNotificationBrightness);
   EEPROM.write(251, fadeTransition);
   EEPROM.write(252, strip.reverseMode);
+  EEPROM.write(399, strip.reactiveEffects);
   EEPROM.write(253, transitionDelayDefault & 0xFF);
   EEPROM.write(254, (transitionDelayDefault >> 8) & 0xFF);
   EEPROM.write(255, briMultiplier);
@@ -384,6 +385,7 @@ void loadSettingsFromEEPROM(bool first)
   transitionDelayDefault = EEPROM.read(253) + ((EEPROM.read(254) << 8) & 0xFF00);
   transitionDelay = transitionDelayDefault;
   briMultiplier = EEPROM.read(255);
+  strip.reactiveEffects = EEPROM.read(399);
 
   readStringFromEEPROM(256, otaPass, 32);
 
@@ -769,7 +771,7 @@ void savePreset(byte index, bool persist)
     EEPROM.write(k, effectFFT1);      // Save FFT Slider values to EEPROM for presets
     EEPROM.write(k+1, effectFFT2);    // Save FFT Slider values to EEPROM for presets
     EEPROM.write(k+2, effectFFT3);    // Save FFT Slider values to EEPROM for presets
-
+    
   } else { //segment 16 can save segments
     EEPROM.write(i, 3);
     EEPROM.write(i+1, bri);

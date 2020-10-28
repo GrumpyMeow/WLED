@@ -12,3 +12,9 @@
 node_modules
 .cproject
 .project
+
+# We don't use these iconfont-files
+icons/iconfont/iconfont.eot
+icons/iconfont/iconfont.svg
+icons/iconfont/iconfont.ttf
+icons/iconfont/iconfont.woff2

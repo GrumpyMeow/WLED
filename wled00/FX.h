@@ -259,6 +259,7 @@
 
 // Sound reactive external variables
 extern int sample;
+extern uint8_t soundReactiveIntensity;
 extern float sampleAvg;
 extern bool samplePeak;
 extern uint8_t myVals[32];
@@ -278,7 +279,7 @@ class WS2812FX {
       uint16_t stop; //segment invalid if stop == 0
       uint8_t speed;
       uint8_t intensity;
-      uint8_t fft1;
+      int8_t fft1;
       uint8_t fft2;
       uint8_t fft3;
       uint8_t palette;
@@ -323,6 +324,14 @@ class WS2812FX {
         if (options & MIRROR)
           vLength = (vLength + 1) /2;  // divide by 2 if mirror, leave at least a single LED
         return vLength;
+      }
+      uint8_t getIntensity() {
+        // Is Reactive enabled?
+        if (getOption(6)) {
+          // Calculate Sound Reactive intensity
+          return (intensity*soundReactiveIntensity) / 255 ;
+        }
+        return intensity;
       }
     } segment;
 
@@ -543,6 +552,7 @@ class WS2812FX {
 
     bool
       reverseMode = false,      //is the entire LED strip reversed?
+      reactiveEffects = false,
       gammaCorrectBri = false,
       gammaCorrectCol = true,
       applyToAllSelected = true,

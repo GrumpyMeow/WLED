@@ -9,7 +9,8 @@
   },
   "scripts": {
     "build": "node tools/cdata.js",
-    "dev": "nodemon -e js,html,htm,css,png,jpg,gif,ico,js -w tools/ -w wled00/data/ -x node tools/cdata.js"
+    "dev": "nodemon -e js,html,htm,css,png,jpg,gif,ico,js -w tools/ -w wled00/data/ -x node tools/cdata.js",
+    "build:iconfont": "webfont ./icons/*.svg --font-name iconfont --template css --dest ./icons/iconfont --template-font-name iconfont --template-class-name icon --fotmats woff --font-height 48 --template-font-path '' --normalize"
   },
   "repository": {
     "type": "git",
@@ -26,6 +27,7 @@
     "html-minifier": "^4.0.0",
     "inliner": "^1.13.1",
     "nodemon": "^2.0.4",
+    "webfont": "^9.0.0",
     "zlib": "^1.0.5"
   }
 }

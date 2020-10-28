@@ -294,6 +294,7 @@ void getSettingsJS(byte subPage, char* dest)
     sappend('v',SET_F("TW"),nightlightMode);
     sappend('i',SET_F("PB"),strip.paletteBlend);
     sappend('c',SET_F("RV"),strip.reverseMode);
+    sappend('c',SET_F("RE"),strip.reactiveEffects);
     sappend('c',SET_F("SL"),skipFirstLed);
     #ifdef ESP8266
     sappends('v',SET_F("LCW"), "");

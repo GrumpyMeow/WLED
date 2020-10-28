@@ -110,6 +110,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     t = request->arg(F("PB")).toInt();
     if (t >= 0 && t < 4) strip.paletteBlend = t;
     strip.reverseMode = request->hasArg(F("RV"));
+    strip.reactiveEffects = request->hasArg(F("RE"));
     skipFirstLed = request->hasArg(F("SL"));
     t = request->arg(F("BF")).toInt();
     if (t > 0) briMultiplier = t;
@@ -192,7 +193,6 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
       audioSyncEnabled &= ~(1 << 0);
       audioSyncEnabled |= 1 << 1;
     }
-    Serial.print(audioSyncEnabled);
     t = request->arg(F("ASP")).toInt();
     audioSyncPort = t;
 
@@ -724,6 +724,10 @@ bool handleSet(AsyncWebServerRequest *request, const String& req)
   //Segment reverse
   pos = req.indexOf(F("MI="));
   if (pos > 0) strip.getSegment(main).setOption(SEG_OPTION_MIRROR, req.charAt(pos+3) != '0');
+
+  //Segment Reactive Enabled
+  pos = req.indexOf(F("RE="));
+  if (pos > 0) strip.getSegment(main).setOption(SEG_OPTION_REACTIVE, req.charAt(pos+3) != '0');
 
   //Segment brightness/opacity
   pos = req.indexOf(F("SB="));

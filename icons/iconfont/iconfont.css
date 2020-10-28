@@ -1,0 +1,210 @@
+@font-face {
+  font-family: "iconfont";
+  font-style: normal;
+  font-weight: 400;
+  font-display: auto;
+  src: url("./iconfont.woff") format("woff");
+}
+
+.icon {
+  display: inline-block;
+  font-family: "iconfont";
+  font-weight: 400;
+  font-style: normal;
+  font-variant: normal;
+  text-rendering: auto;
+  line-height: 1;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+}
+
+.icon-lg {
+  font-size: 1.33333em;
+  line-height: 0.75em;
+  vertical-align: -0.0667em;
+}
+
+.icon-xs {
+  font-size: 0.75em;
+}
+
+.icon-sm {
+  font-size: 0.875em;
+}
+
+.icon-1x {
+  font-size: 1em;
+}
+
+.icon-2x {
+  font-size: 2em;
+}
+
+.icon-3x {
+  font-size: 3em;
+}
+
+.icon-4x {
+  font-size: 4em;
+}
+
+.icon-5x {
+  font-size: 5em;
+}
+
+.icon-6x {
+  font-size: 6em;
+}
+
+.icon-7x {
+  font-size: 7em;
+}
+
+.icon-8x {
+  font-size: 8em;
+}
+
+.icon-9x {
+  font-size: 9em;
+}
+
+.icon-10x {
+  font-size: 10em;
+}
+
+.icon-fw {
+  text-align: center;
+  width: 1.25em;
+}
+
+.icon-border {
+  border: solid 0.08em #eee;
+  border-radius: 0.1em;
+  padding: 0.2em 0.25em 0.15em;
+}
+
+.icon-pull-left {
+  float: left;
+}
+
+.icon-pull-right {
+  float: right;
+}
+
+.icon.icon-pull-left {
+  margin-right: 0.3em;
+}
+
+.icon.icon-pull-right {
+  margin-left: 0.3em;
+}
+
+
+.icon-align_horizontal_left::before {
+  content: "\ea01";
+}
+
+.icon-align_horizontal_right::before {
+  content: "\ea02";
+}
+
+.icon-bar_chart::before {
+  content: "\ea03";
+}
+
+.icon-brightness_high::before {
+  content: "\ea04";
+}
+
+.icon-brightness_low::before {
+  content: "\ea05";
+}
+
+.icon-clear::before {
+  content: "\ea06";
+}
+
+.icon-create::before {
+  content: "\ea07";
+}
+
+.icon-delete_outline::before {
+  content: "\ea08";
+}
+
+.icon-expand_more::before {
+  content: "\ea09";
+}
+
+.icon-favorite::before {
+  content: "\ea0a";
+}
+
+.icon-flash_on::before {
+  content: "\ea0b";
+}
+
+.icon-highlight::before {
+  content: "\ea0c";
+}
+
+.icon-info::before {
+  content: "\ea0d";
+}
+
+.icon-insights::before {
+  content: "\ea0e";
+}
+
+.icon-layers::before {
+  content: "\ea0f";
+}
+
+.icon-new_releases::before {
+  content: "\ea10";
+}
+
+.icon-palette::before {
+  content: "\ea11";
+}
+
+.icon-playlist_add::before {
+  content: "\ea12";
+}
+
+.icon-power_settings_new::before {
+  content: "\ea13";
+}
+
+.icon-save::before {
+  content: "\ea14";
+}
+
+.icon-settings::before {
+  content: "\ea15";
+}
+
+.icon-speed::before {
+  content: "\ea16";
+}
+
+.icon-sync_alt::before {
+  content: "\ea17";
+}
+
+.icon-timer::before {
+  content: "\ea18";
+}
+
+.icon-tonality::before {
+  content: "\ea19";
+}
+
+.icon-visibility::before {
+  content: "\ea1a";
+}
+
+.icon-zoom_out_map::before {
+  content: "\ea1b";
+}
+

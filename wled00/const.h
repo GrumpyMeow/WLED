@@ -103,6 +103,7 @@
 #define SEG_OPTION_MIRROR         3            //Indicates that the effect will be mirrored within the segment
 #define SEG_OPTION_NONUNITY       4            //Indicates that the effect does not use FRAMETIME or needs getPixelColor
 #define SEG_OPTION_FREEZE         5            //Segment contents will not be refreshed
+#define SEG_OPTION_REACTIVE       6            //Reactive effects
 #define SEG_OPTION_TRANSITIONAL   7
 
 //Timer mode types

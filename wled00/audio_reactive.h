@@ -23,10 +23,6 @@
 
 const int SAMPLE_RATE = 10240; // was 16000 for digital mic
 
-#ifdef ESP32
-  TaskHandle_t FFT_Task;
-#endif
-
 //Use userVar0 and userVar1 (API calls &U0=,&U1=, uint16_t)
 #ifndef MIC_PIN
   #ifdef ESP8266
@@ -50,13 +46,14 @@ const int SAMPLE_RATE = 10240; // was 16000 for digital mic
 
 int micIn;                                          // Current sample starts with negative values and large values, which is why it's 16 bit signed
 int sample;                                         // Current sample
+uint8_t soundReactiveIntensity;                     // [0..255] Intensity based on (sound) input. This value will decrease over time, until a new sample with a higher amplitude is sampled. 
 float sampleAvg = 0;                                // Smoothed Average
 float micLev = 0;                                   // Used to convert returned value to have '0' as minimum. A leveller
-uint8_t maxVol = 6;                                // Reasonable value for constant volume for 'peak detector', as it won't always trigger
-bool samplePeak = 0;                                // Boolean flag for peak. Responding routine must reset this flag
+uint8_t maxVol = 6;                                 // Reasonable value for constant volume for 'peak detector', as it won't always trigger
+bool samplePeak = false;                            // Boolean flag to indicate a peak/beat has been detected . Effects should reset this flag if processed.
 int sampleAdj;                                      // Gain adjusted sample value.
 #ifdef ESP32                                        // Transmitting doesn't work on ESP8266, don't bother allocating memory
-bool udpSamplePeak = 0;                             // Boolean flag for peak. Set at the same tiem as samplePeak, but reset by transmitAudioData
+   bool udpSamplePeak = false;                      // Boolean flag for peak. Set at the same time as samplePeak, but reset by transmitAudioData
 #endif
 int sampleAgc;                                      // Our AGC sample
 float multAgc;                                      // sample * multAgc = sampleAgc. Our multiplier
@@ -67,6 +64,7 @@ int delayMs = 10;                                   // I don't want to sample to
 double beat = 0;                                    // beat Detection
 
 uint16_t micData;                                   // Analog input for FFT
+uint32_t maxAmp;                                    // Maximum amplitude of micData now kept. Prevent missing of peaks. Use the higher FFT-samplerate.
 uint16_t lastSample;                                // last audio noise sample
 
 uint8_t myVals[32];                                 // Used to store a pile of samples as WLED frame rate and WLED sample rate are not synchronized
@@ -95,6 +93,7 @@ void getSample() {
   #else
     #ifdef ESP32
       micIn = micData;
+      maxAmp = 0; // Reset maxAmp. The samplerate of getSample is +/- 100Herz. The samplerate of FFT is higher. Keep the sample with the highest amplitude to prevent 'missed peaks' . 
       if (digitalMic == false) micIn = micIn >> 2;  // ESP32 has 2 more bits of A/D, so we need to normalize
     #endif
     #ifdef ESP8266
@@ -154,47 +153,51 @@ void agcAvg() {                                                     // A simple 
 
   #include "arduinoFFT.h"
 
-  void transmitAudioData()
+  void transmitADTimer_callback(void *arg)
   {
-    if (!udpSyncConnected) return;
-    extern uint8_t myVals[];
-    extern int sampleAgc;
-    extern int sample;
-    extern float sampleAvg;
-    extern bool udpSamplePeak;
-    extern double fftResult[];
-    extern double FFT_Magnitude;
-    extern double FFT_MajorPeak;
+    if (audioSyncEnabled & (1 << 0)) {
 
-    audioSyncPacket transmitData;
+      if (!udpSyncConnected) return;
+      extern uint8_t myVals[];
+      extern int sampleAgc;
+      extern int sample;
+      extern float sampleAvg;
+      extern bool udpSamplePeak;
+      extern double fftResult[];
+      extern double FFT_Magnitude;
+      extern double FFT_MajorPeak;
 
-    for (int i = 0; i < 32; i++) {
-      transmitData.myVals[i] = myVals[i];
+      audioSyncPacket transmitData;
+
+      for (int i = 0; i < 32; i++) {
+        transmitData.myVals[i] = myVals[i];
+      }
+
+      transmitData.sampleAgc = sampleAgc;
+      transmitData.sample = sample;
+      transmitData.sampleAvg = sampleAvg;
+      transmitData.samplePeak = udpSamplePeak;
+      udpSamplePeak = 0;                              // Reset udpSamplePeak after we've transmitted it
+
+      for (int i = 0; i < 16; i++) {
+        transmitData.fftResult[i] = (uint8_t)constrain(fftResult[i], 0, 254);
+      }
+
+      transmitData.FFT_Magnitude = FFT_Magnitude;
+      transmitData.FFT_MajorPeak = FFT_MajorPeak;
+      try {
+        fftUdp.beginMulticastPacket();
+        fftUdp.write(reinterpret_cast<uint8_t *>(&transmitData), sizeof(transmitData));
+        fftUdp.endPacket();
+      } catch(...) {      
+        udpSyncConnected = false; // When error, don't continuously keep transmitting data
+      }
     }
-
-    transmitData.sampleAgc = sampleAgc;
-    transmitData.sample = sample;
-    transmitData.sampleAvg = sampleAvg;
-    transmitData.samplePeak = udpSamplePeak;
-    udpSamplePeak = 0;                              // Reset udpSamplePeak after we've transmitted it
-
-    for (int i = 0; i < 16; i++) {
-      transmitData.fftResult[i] = (uint8_t)constrain(fftResult[i], 0, 254);
-    }
-
-    transmitData.FFT_Magnitude = FFT_Magnitude;
-    transmitData.FFT_MajorPeak = FFT_MajorPeak;
-
-    fftUdp.beginMulticastPacket();
-    fftUdp.write(reinterpret_cast<uint8_t *>(&transmitData), sizeof(transmitData));
-    fftUdp.endPacket();
-    return;
-  }  // transmitAudioData()
+  }
 
   const uint16_t samples = 512;                     // This value MUST ALWAYS be a power of 2
   // The line below was replaced by  'const int SAMPLE_RATE = 10240'
   //const double samplingFrequency = 10240;           // Sampling frequency in Hz
-  unsigned int sampling_period_us;
   unsigned long microseconds;
 
   double FFT_MajorPeak = 0;
@@ -202,6 +205,10 @@ void agcAvg() {                                                     // A simple 
   uint16_t mAvg = 0;
 
   // These are the input and output vectors.  Input vectors receive computed results from FFT.
+  uint16_t sampleIndex = 0;
+  uint16_t fftIndex = 0;
+  const uint16_t sampleBufferSize = samples * 2;
+  double sampleBuffer[sampleBufferSize];
   double vReal[samples];
   double vImag[samples];
   double fftBin[samples];
@@ -225,43 +232,10 @@ void agcAvg() {                                                     // A simple 
     return result;
   }
 
-  // FFT main code
-  void FFTcode( void * parameter) {
-    double beatSample = 0;
-    double envelope = 0;
-    uint16_t rawMicData = 0;
-
-    for(;;) {
-      delay(1);           // DO NOT DELETE THIS LINE! It is needed to give the IDLE(0) task enough time and to keep the watchdog happy.
-      microseconds = micros();
-      extern double volume;
-
-      for(int i=0; i<samples; i++) {
-
-        if (digitalMic == false) {
-          micData = analogRead(MIC_PIN);                      // Analog Read
-          rawMicData = micData >> 2;                          // ESP32 has 12 bit ADC
-        } else {
-          int32_t digitalSample = 0;
-          int bytes_read = i2s_pop_sample(I2S_PORT, (char *)&digitalSample, portMAX_DELAY); // no timeout
-          if (bytes_read > 0) {
-            micData = abs(digitalSample >> 16);
-            // Serial.println(micData);
-            rawMicData = micData;
-          } // ESP32 has 12 bit ADC
-        }
-
-        vReal[i] = micData;                                   // Store Mic Data in an array
-        vImag[i] = 0;
-
-        while(micros() - microseconds < sampling_period_us){
-          //empty loop
-          }
-        microseconds += sampling_period_us;
-      }
-
+  void doFFT() {
       FFT.Windowing( FFT_WIN_TYP_HAMMING, FFT_FORWARD );      // Weigh data
       FFT.Compute( FFT_FORWARD );                             // Compute FFT
+      FFT.DCRemoval();
       FFT.ComplexToMagnitude();                               // Compute magnitudes
 
       //
@@ -273,14 +247,7 @@ void agcAvg() {                                                     // A simple 
 
       for (int i = 0; i < samples; i++) fftBin[i] = vReal[i]; // export FFT field
 
-// Andrew's updated mapping of 256 bins down to the 16 result bins with Sample Freq = 10240, samples = 512.
-// Based on testing, the lowest/Start frequency is 60 Hz (with bin 3) and a highest/End frequency of 5120 Hz in bin 255.
-// Now, Take the 60Hz and multiply by 1.320367784 to get the next frequency and so on until the end. Then detetermine the bins.
-// End frequency = Start frequency * multiplier ^ 16
-// Multiplier = (End frequency/ Start frequency) ^ 1/16
-// Multiplier = 1.320367784
-
-//                                                Range      |  Freq | Max vol on MAX9814 @ 40db gain.
+      //                                      // Range      |  Freq | Max vol on MAX9814 @ 40db gain.
       fftResult[0] = (fftAdd(3,4)) /2;        // 60 - 100    -> 82Hz,  26000
       fftResult[1] = (fftAdd(4,5)) /2;        // 80 - 120    -> 104Hz, 44000
       fftResult[2] = (fftAdd(5,7)) /3;        // 100 - 160   -> 130Hz, 66000
@@ -302,12 +269,59 @@ void agcAvg() {                                                     // A simple 
         if(fftResult[i]<0) fftResult[i]=0;
         avgChannel[i] = ((avgChannel[i] * 31) + fftResult[i]) / 32;                         // Smoothing of each result bin. Experimental.
         fftResult[i] = constrain(map(fftResult[i], 0,  maxChannel[i], 0, 255),0,255);       // Map result bin to 8 bits.
-      //fftResult[i] = constrain(map(fftResult[i], 0,  avgChannel[i]*2, 0, 255),0,255);     // AGC map result bin to 8 bits. Can be noisy at low volumes. Experimental.
-
       }
-    }
-  }  // FFTcode( void * parameter)
+  }
 
+  void sampleTimer_callback(void *arg) {
+    uint16_t rawMicData;
+    if (digitalMic == false) {
+        rawMicData = analogRead(MIC_PIN);
+        micData = rawMicData >> 2;
+    } else {
+        int32_t digitalSample = 0;
+        int bytes_read = i2s_pop_sample(I2S_PORT, (char *)&digitalSample, portMAX_DELAY);
+        if (bytes_read > 0) {            
+            // Calculate the amplitude of the sample  
+            uint32_t amp = abs(digitalSample);     
+            rawMicData = abs(digitalSample >> 16); 
+            if (amp > maxAmp) {
+              // Amplitude is higher than current kept sample.
+              micData = rawMicData;
+              maxAmp = amp;
+            }
+          }
+    }
+
+    sampleBuffer[sampleIndex] = rawMicData;
+
+    sampleIndex++;
+    if (sampleIndex>sampleBufferSize) {
+      sampleIndex = 0;
+    }
+  }
+
+  void fftTimer_callback(void *arg) {
+    int16_t length = 0;
+    if (sampleIndex > fftIndex) {
+      length = sampleIndex-fftIndex;
+    } else if (fftIndex> sampleIndex) {
+      length = sampleBufferSize - fftIndex + sampleIndex;
+    }
+
+    if (length > samples) {
+      for (int idx=0;idx<samples;idx++) {
+        vReal[idx] = sampleBuffer[fftIndex];
+        fftIndex++;
+        if (fftIndex > sampleBufferSize) {
+          fftIndex = 0;
+        }
+      }
+      doFFT();
+    } 
+  }
+
+  
+  
 #endif
 
 void logAudio() {
