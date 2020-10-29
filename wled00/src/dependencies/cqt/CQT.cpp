@@ -89,8 +89,29 @@ void CQT::preprocess_filters() {
 	for (i=0;i < FREQS;++i) {
 		Serial.printf("band=%d\tfreq=%d\tdiv=%d\tnfreq=%d\n", i, Freq[i], Div[i], NFreq[i]);
 	}
-
 }
+// F0 = 20 F16=7000
+// twoPiQ: 22624    int2PI=8192     nn=1610612736
+// LowFreqEndIndex: 2
+// samplesLeft: 315
+// band=0  freq=19 		   div=1   nfreq=197
+// band=1  freq=28 		   div=1   nfreq=136
+// band=2  freq=41 		   div=3   nfreq=262
+// band=3  freq=59 		   div=2   nfreq=262
+// band=4  freq=86 		   div=2   nfreq=186
+// band=5  freq=124        div=2   nfreq=129
+// band=6  freq=179        div=1   nfreq=177
+// band=7  freq=259        div=1   nfreq=123
+// band=8  freq=374        div=1   nfreq=86
+// band=9  freq=539        div=1   nfreq=59
+// band=10 freq=778        div=1   nfreq=41
+// band=11 freq=1122       div=1   nfreq=28
+// band=12 freq=1618       div=1   nfreq=19
+// band=13 freq=2333       div=1   nfreq=13
+// band=14 freq=3365       div=1   nfreq=9
+// band=15 freq=4853       div=1   nfreq=6
+
+
 
 #define qN 11
 #define qA PRECISION
