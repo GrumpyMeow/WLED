@@ -17,32 +17,36 @@
 #define BETA ((6<<PRECISION)/13)	// 1-0.53836*(1<<PRECISION)
 #define SCALE (1<<PRECISION)
 #define FREQS 16    // Number of frequency bands
+#define FSAMPLE 14200
+#define lowFreqBound 20
+#define highFreqBound 7000
+#define NRSAMPLES (1024)
+#define MAXTOTALSAMPLES 2048
 
 
 class CQT {
 public:
-  int * signal;     // current sample signal
+  int signal[NRSAMPLES];		// current sample signal
+  int signal_lowfreq[NRSAMPLES];	// current sample signal, with a lower samplin frequency (see LOWFREQDIV)
   int freqs[FREQS];		// frequencies for each band/filter
-  void init(uint SampleRate, uint BlockSize);
-  void calculate();
+  uint32_t nrInterrupts;
+  void init();
+  void cqt();
+  void adjustInputs();
 private:
-  unsigned int nrInterrupts;
-  uint NRSAMPLES;
-  uint MAXTOTALSAMPLES;
+  unsigned int oldMinF, oldMaxF, F0, F16;	// minimum and maximum input frequencies
+  
   uint32_t lowfreq_endIndex = 0;
+
   unsigned int Freq[FREQS + 1];	// lower and upper frequency for each filter/band
   unsigned int Div[FREQS];	// sample frequency divider for each filter
   unsigned int NFreq[FREQS];	// number of samples needed for each filter
-
-  uint32_t amplitude;			// amplification of signal
   unsigned fixedpoint twoPiQ;	// 2*pi*Q value for the CQT (Constant Q Transform)
-  unsigned int SampleRate; // Sample rate in Herz  
-  int * signal_lowfreq;	// current sample signal, with a lower samplin frequency (see LOWFREQDIV)
-  unsigned int lowFreqBound; // Lower frequency bound
-  unsigned int highFreqBound; // Higher frequency bound
+
+  uint32_t amplitude = 512;			// amplification of signal
   unsigned int minFreq; 
   unsigned int maxFreq;
-  void calculateParameters(uint minFreq, uint maxFreq);
+  void preprocess_filters();
   int approxSin(int x);
   fixedpoint approxCos(fixedpoint in);
   fixedpoint hamming(int m, int k);
