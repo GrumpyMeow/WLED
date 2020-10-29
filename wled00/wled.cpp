@@ -221,9 +221,6 @@ void WLED::setup()
 #ifdef WLED_ENABLE_DMX
   initDMX();
 #endif
-#ifdef WLED_ENABLE_SOUND
-  initSound();
-#endif
   // HTTP server page init
   initServer();
 }

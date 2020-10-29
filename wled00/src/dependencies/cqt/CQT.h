@@ -16,25 +16,27 @@
 #define ALPHA ((7<<PRECISION)/13)	// 0.53836*(1<<PRECISION)
 #define BETA ((6<<PRECISION)/13)	// 1-0.53836*(1<<PRECISION)
 #define SCALE (1<<PRECISION)
+#define FREQS 16    // Number of frequency bands
 
 
 class CQT {
 public:
-  void init(uint FrequencyBands, uint SampleRate, uint BlockSize);
-  void calculate(int inputsignal[], int outputsignal[]);
+  int * signal;     // current sample signal
+  int freqs[FREQS];		// frequencies for each band/filter
+  void init(uint SampleRate, uint BlockSize);
+  void calculate();
 private:
   unsigned int nrInterrupts;
   uint NRSAMPLES;
   uint MAXTOTALSAMPLES;
   uint32_t lowfreq_endIndex = 0;
+  unsigned int Freq[FREQS + 1];	// lower and upper frequency for each filter/band
+  unsigned int Div[FREQS];	// sample frequency divider for each filter
+  unsigned int NFreq[FREQS];	// number of samples needed for each filter
+
   uint32_t amplitude;			// amplification of signal
   unsigned fixedpoint twoPiQ;	// 2*pi*Q value for the CQT (Constant Q Transform)
-  unsigned int FrequencyBands; // Number of frequency bands
-  unsigned int SampleRate; // Sample rate in Herz
-  unsigned int * Div;	// sample frequency divider for each filter
-  unsigned int * BandFrequency; // Frequency edges of bands
-  unsigned int * NyqistFrequency; // Nyqist frequencies per band
-  int * signal;     // current sample signal
+  unsigned int SampleRate; // Sample rate in Herz  
   int * signal_lowfreq;	// current sample signal, with a lower samplin frequency (see LOWFREQDIV)
   unsigned int lowFreqBound; // Lower frequency bound
   unsigned int highFreqBound; // Higher frequency bound
