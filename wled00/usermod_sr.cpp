@@ -59,25 +59,27 @@ void global_fftTimer_callback(void *arg) {
     };
     esp_timer_handle_t fftTimerHandle;
     ESP_ERROR_CHECK(esp_timer_create(&fftTimer, &fftTimerHandle));
-    uint64_t fftPeriod = 1000000 / (FSAMPLE / (NRSAMPLES/4)) ; 
+    uint64_t fftPeriod = 1000000 / (FSAMPLE / NRSAMPLES); 
     ESP_ERROR_CHECK(esp_timer_start_periodic(fftTimerHandle, fftPeriod));
 
     Serial.println("Timers initialized.");
   }
 
-int32_t maxAmp = 0;
+int32_t maxAmp = 512;
 
   int SoundReactiveUsermod::Sample_I2S() {
     int32_t digitalSample = 0;
     int bytes_read = i2s_pop_sample(I2S_PORT, (char *)&digitalSample, portMAX_DELAY);
     if (bytes_read > 0) {    
+        digitalSample = digitalSample >> 16;
         int32_t amp = abs(digitalSample);
         if (amp > maxAmp) maxAmp = amp;
-        if (maxAmp>8192) {
-          digitalSample = digitalSample / (maxAmp/ 8192);
-        }
-        maxAmp *=0.999f;
-       
+        if (maxAmp>512) {
+          digitalSample = (digitalSample*512) / maxAmp;
+          //if (maxAmp>10000000) {
+              maxAmp *=0.9999999f;
+          //}
+        }       
 
         return digitalSample ;
     };
@@ -85,58 +87,22 @@ int32_t maxAmp = 0;
   
   void SoundReactiveUsermod::sampleTimer_callback(void *arg) {
     int digitalSample = Sample_I2S();
-    sampleBuffer[sampleIndex] = digitalSample;
-
-    sampleIndex++;
-    if (sampleIndex>SampleBufferSize) {
-      //Serial.print("X");
-      sampleIndex = 0;
-    }
+    //digitalSample = 0;
+    cqt->nrInterrupts++;  
+    cqt->signal[(cqt->nrInterrupts) % NRSAMPLES] = digitalSample;
+    cqt->signal_lowfreq[(cqt->nrInterrupts / LOWFREQDIV) % NRSAMPLES] = digitalSample;     
   }
 
   void SoundReactiveUsermod::fftTimer_callback(void *arg) {
-    int16_t length = 0;
-    if (sampleIndex > fftIndex) {
-      length = sampleIndex-fftIndex;
-    } else if (fftIndex> sampleIndex) {
-      length = SampleBufferSize - fftIndex + sampleIndex;
-    }
-
-    if (length > NRSAMPLES ) {
-      for (int idx=0;idx<NRSAMPLES;idx++) {
-        
-        // signal values should be in range -512 ... +512
-        int16_t latestSample = sampleBuffer[fftIndex];
-
-        cqt->signal[(cqt->nrInterrupts) % NRSAMPLES] = latestSample;
-        cqt->signal_lowfreq[(cqt->nrInterrupts / LOWFREQDIV) % NRSAMPLES] = latestSample;     
-
-        cqt->nrInterrupts++;
-        fftIndex++;
-        if (fftIndex > SampleBufferSize) {
-          //Serial.print("Y");
-          fftIndex = 0;
-        }
-      }
-
-      // for (int idx=0;idx<NRSAMPLES;idx++) {
-      //   Serial.printf("%03d ", cqt->signal[idx]);
-      // }
-      // Serial.println("");
-
-      // for (int idx=0;idx<NRSAMPLES;idx++) {
-      //   Serial.printf("%04d ", cqt->signal_lowfreq[idx]);
-      // }
-      
-      // Serial.println("");
-
-      cqt->adjustInputs();
       cqt->cqt();
+      Serial.printf("%09d " , maxAmp);
       for (int idx=0;idx<FREQS;idx++) {
-        Serial.printf("%04d ", cqt->freqs[idx]);
+        int v = cqt->freqs[idx];
+        if (v>30) {
+          Serial.printf("%04d ", v);
+        } else { Serial.print("     ");}
       }
       Serial.println("");
-    } 
   }
 #pragma endregion
 
