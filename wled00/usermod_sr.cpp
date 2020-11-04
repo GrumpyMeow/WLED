@@ -101,7 +101,7 @@ int32_t maxAmp = 512;
           Serial.printf("%03d ", v);
         } else { Serial.print(".   ");}
       }
-      Serial.printf("%09dms\n", millis() - startTime);
+      Serial.printf("%3dms\n", millis() - startTime);
   }
 #pragma endregion
 

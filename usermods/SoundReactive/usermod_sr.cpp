@@ -14,27 +14,6 @@ void global_fftTimer_callback(void *arg) {
 
 #pragma region PRIVATE
 
-  void SoundReactiveUsermod::handleSound() {
-      /*size_t num_bytes_read;
-      esp_err_t err = i2s_read(I2S_PORT, &i2sBuffer, sizeof(i2sBuffer), &num_bytes_read, portMAX_DELAY);
-      if (err == ESP_OK && num_bytes_read != 0) {
-          for (int i=0;i<BlockSize;i++) {
-              int32_t sample = i2sBuffer[i];
-              int32_t amp = sample;
-              if (amp<0) amp = -amp;
-              if (amp>maxAmp) maxAmp = amp;
-              float normalizedSample = sample / (maxAmp/512.0f);
-              inputsignal[i] = normalizedSample;
-          }
-          
-          cqt->calculate(inputsignal, outputsignal);
-          for (int i=0;i<FrequencyBands;i++) {
-              Serial.printf("%d\t" , outputsignal[i]);
-          }
-          Serial.println();
-      } */
-  }
-
   void SoundReactiveUsermod::initSound() {
     // Configuring the I2S driver and pins.
     // This function must be called before any I2S driver read/write operations.
@@ -52,9 +31,10 @@ void global_fftTimer_callback(void *arg) {
   }
 
   void SoundReactiveUsermod::initCQT() {
+    Serial.println("CQT initializing...");
     cqt = new CQT();
-    cqt->init( SamplingFrequency, BlockSize);
-    Serial.println("CQT initialized.");
+    cqt->init();
+    cqt->printFilters();    
   }
 
   void SoundReactiveUsermod::initTimers() {
@@ -67,7 +47,7 @@ void global_fftTimer_callback(void *arg) {
     };
     esp_timer_handle_t sampleTimerHandle;
     ESP_ERROR_CHECK(esp_timer_create(&sampleTimer, &sampleTimerHandle));
-    uint64_t samplePeriod = 1000000 / SamplingFrequency ; 
+    uint64_t samplePeriod = 1000000 / FSAMPLE ; 
     ESP_ERROR_CHECK(esp_timer_start_periodic(sampleTimerHandle, samplePeriod));
 
     // Setup FFT timer
@@ -79,56 +59,49 @@ void global_fftTimer_callback(void *arg) {
     };
     esp_timer_handle_t fftTimerHandle;
     ESP_ERROR_CHECK(esp_timer_create(&fftTimer, &fftTimerHandle));
-    uint64_t fftPeriod = 1000000 / (SamplingFrequency / (BlockSize/4)) ; 
+    uint64_t fftPeriod = 1000000 / (FSAMPLE / NRSAMPLES); 
     ESP_ERROR_CHECK(esp_timer_start_periodic(fftTimerHandle, fftPeriod));
 
     Serial.println("Timers initialized.");
   }
 
+int32_t maxAmp = 512;
+
   int SoundReactiveUsermod::Sample_I2S() {
     int32_t digitalSample = 0;
     int bytes_read = i2s_pop_sample(I2S_PORT, (char *)&digitalSample, portMAX_DELAY);
-    if (bytes_read > 0) {            
-      return digitalSample >> 16;
-    }
+    if (bytes_read > 0) {    
+        digitalSample = digitalSample >> 16;
+        int32_t amp = abs(digitalSample);
+        if (amp > maxAmp) maxAmp = amp;
+        if (maxAmp>512) {
+          digitalSample = (digitalSample*512) / maxAmp;
+          maxAmp -= 1;
+        }       
 
+        return digitalSample ;
+    };
   }
-
+  
   void SoundReactiveUsermod::sampleTimer_callback(void *arg) {
-    int digitalSample = inoise16_raw(millis() >> 7);
-    // signal values should be in range -512 ... +512
-    sampleBuffer[sampleIndex] = digitalSample;
-
-    sampleIndex++;
-    if (sampleIndex>SampleBufferSize) {
-      sampleIndex = 0;
-    }
+    int digitalSample = Sample_I2S();
+    cqt->sampleIndex++;  
+    cqt->signal[(cqt->sampleIndex) % NRSAMPLES] = digitalSample;
+    cqt->signal_lowfreq[(cqt->sampleIndex / LOWFREQDIV) % NRSAMPLES] = digitalSample;
   }
 
   void SoundReactiveUsermod::fftTimer_callback(void *arg) {
-    int16_t length = 0;
-    if (sampleIndex > fftIndex) {
-      length = sampleIndex-fftIndex;
-    } else if (fftIndex> sampleIndex) {
-      length = SampleBufferSize - fftIndex + sampleIndex;
-    }
+      const unsigned long startTime = millis();
 
-    if (length > BlockSize) {
-      for (int idx=0;idx<BlockSize;idx++) {
-        
-        cqt->signal[idx] = sampleBuffer[fftIndex];
-        fftIndex++;
-        if (fftIndex > SampleBufferSize) {
-          fftIndex = 0;
-        }
+      cqt->cqt();
+      Serial.printf("%09d " , maxAmp);
+      for (int idx=0;idx<NRBANDS;idx++) {
+        int v = cqt->bandEnergy[idx];
+        if (v>20) {
+          Serial.printf("%03d ", v);
+        } else { Serial.print(".   ");}
       }
-
-      cqt->calculate();
-      for (int idx=0;idx<FrequencyBands;idx++) {
-        Serial.printf("%03d ", cqt->bandEnergy[idx]);
-      }
-      Serial.println("");
-    } 
+      Serial.printf("%3dms\n", millis() - startTime);
   }
 #pragma endregion
 
