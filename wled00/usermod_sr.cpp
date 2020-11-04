@@ -34,7 +34,7 @@ void global_fftTimer_callback(void *arg) {
     Serial.println("CQT initializing...");
     cqt = new CQT();
     cqt->init();
-    
+    cqt->printFilters();    
   }
 
   void SoundReactiveUsermod::initTimers() {
@@ -76,9 +76,7 @@ int32_t maxAmp = 512;
         if (amp > maxAmp) maxAmp = amp;
         if (maxAmp>512) {
           digitalSample = (digitalSample*512) / maxAmp;
-          //if (maxAmp>10000000) {
-              maxAmp *=0.9999999f;
-          //}
+          maxAmp -= 1;
         }       
 
         return digitalSample ;
@@ -87,22 +85,23 @@ int32_t maxAmp = 512;
   
   void SoundReactiveUsermod::sampleTimer_callback(void *arg) {
     int digitalSample = Sample_I2S();
-    //digitalSample = 0;
-    cqt->nrInterrupts++;  
-    cqt->signal[(cqt->nrInterrupts) % NRSAMPLES] = digitalSample;
-    cqt->signal_lowfreq[(cqt->nrInterrupts / LOWFREQDIV) % NRSAMPLES] = digitalSample;     
+    cqt->sampleIndex++;  
+    cqt->signal[(cqt->sampleIndex) % NRSAMPLES] = digitalSample;
+    cqt->signal_lowfreq[(cqt->sampleIndex / LOWFREQDIV) % NRSAMPLES] = digitalSample;
   }
 
   void SoundReactiveUsermod::fftTimer_callback(void *arg) {
+      const unsigned long startTime = millis();
+
       cqt->cqt();
       Serial.printf("%09d " , maxAmp);
-      for (int idx=0;idx<FREQS;idx++) {
-        int v = cqt->freqs[idx];
-        if (v>30) {
-          Serial.printf("%04d ", v);
-        } else { Serial.print("     ");}
+      for (int idx=0;idx<NRBANDS;idx++) {
+        int v = cqt->bandEnergy[idx];
+        if (v>20) {
+          Serial.printf("%03d ", v);
+        } else { Serial.print(".   ");}
       }
-      Serial.println("");
+      Serial.printf("%09dms\n", millis() - startTime);
   }
 #pragma endregion
 

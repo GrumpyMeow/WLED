@@ -7,7 +7,7 @@
 
 // Constructor of CQT
 void CQT::init() {
-	this->nrInterrupts = 0;
+	this->sampleIndex = 0;
 
 	for (uint k = 0; k < NRSAMPLES; ++k) {
 	    signal[k] = 0;		
@@ -15,7 +15,7 @@ void CQT::init() {
     }
 
     // TODO: initialize everything decently to avoid division by 0 errors and other problems
-    for (uint k = 0; k < FREQS; ++k) {
+    for (uint k = 0; k < NRBANDS; ++k) {
 	    Div[k] = 1;		
     }
 
@@ -49,56 +49,72 @@ void CQT::adjustInputs() {
 	}
 
 	F0 = minF;
-	F16 = maxF;
+	Fmax = maxF;
 	preprocess_filters();
 }
 
+void CQT::printFilters() {
+	Serial.println("Constant Q Transform bands:");
+	int band;
+	for (band = 0; band<NRBANDS-1;band++) {
+		if (band==lowfreqEndIndex) Serial.println("--- LOWFREQ sample-buffer used for above bands --- Normal sample-buffer used for below bands  ---");
+		Serial.printf("Band:%3d\t\t%5dHz - %5dHz\tDiv=%d\tNFreq=%d\n", band , Freq[band], Freq[band+1], Div[band], NFreq[band] );
+	}
+	Serial.printf("Band:%3d\t\t%5dHz - %5dHz\tDiv=%d\tNFreq=%d\n", band , Freq[band], Fmax , Div[band], NFreq[band] );
+}
+
 void CQT::preprocess_filters() {
-    //CDC.printf("calculating twoPiQ...\n");
-    float nn = powf(2, log(F16 / (double) F0) / log(2) / 16.0);
+    float nn = powf(2, log(Fmax / (double) F0) / log(2) / (double)NRBANDS);
     twoPiQ = int2PI * (nn + 1) / (nn - 1) / 2;
 
-    int i;
-    //printf("calculating the border frequencies...\n");
-    for (i = 0; i < FREQS + 1; ++i) {
-	Freq[i] = (F0 * powf(nn, i) + F16 / powf(nn, FREQS - i)) / 2;
+    int band;
+    // calculating the border frequencies
+    for (band = 0; band < NRBANDS + 1; ++band) {
+		Freq[band] = (F0 * powf(nn, band) + Fmax / powf(nn, NRBANDS - band)) / 2;
     }
 
-    //CDC.printf("calculating the index until which the signal_lowfreq samples should be used\n");
-    lowfreq_endIndex = 0;
-    while (FSAMPLE / (Freq[lowfreq_endIndex + 1] - Freq[lowfreq_endIndex]) >= NRSAMPLES && lowfreq_endIndex < FREQS) {
-	++lowfreq_endIndex;
+    // calculating the index until which the signal_lowfreq samples should be used
+    lowfreqEndIndex = 0;
+    while (FSAMPLE / (Freq[lowfreqEndIndex + 1] - Freq[lowfreqEndIndex]) >= NRSAMPLES && lowfreqEndIndex < NRBANDS) {
+		++lowfreqEndIndex;
     }
 
     int samplesLeft = MAXTOTALSAMPLES;
 
-    //CDC.printf("calculating sample frequency dividers...\n");
-    for (i = 16; i > lowfreq_endIndex; --i) {
-	Div[i - 1] = 1 + FSAMPLE / ((Freq[i] - Freq[i - 1]) * samplesLeft / i);
-	NFreq[i - 1] = FSAMPLE / (Freq[i] - Freq[i - 1]) / Div[i - 1];
-	samplesLeft -= NFreq[i - 1];
+    // calculating sample frequency dividers
+    for (band = NRBANDS; band > lowfreqEndIndex; --band) {
+		int bandFreqWidth = Freq[band] - Freq[band - 1];
+		Div[band - 1] = 1 + FSAMPLE / (bandFreqWidth * samplesLeft / band);
+		NFreq[band - 1] = FSAMPLE / bandFreqWidth / Div[band - 1];
+		samplesLeft -= NFreq[band - 1];
     }
-    for (; i > 0; --i) {
-	Div[i - 1] = 1 + FSAMPLE / LOWFREQDIV / ((Freq[i] - Freq[i - 1]) * samplesLeft / i);
-	NFreq[i - 1] = FSAMPLE / LOWFREQDIV / (Freq[i] - Freq[i - 1]) / Div[i - 1];
-	samplesLeft -= NFreq[i - 1];
+
+    for (; band > 0; --band) {
+		int bandFreqWidth = Freq[band] - Freq[band - 1];
+		Div[band - 1] = 1 + FSAMPLE / LOWFREQDIV / (bandFreqWidth * samplesLeft / band);
+		NFreq[band - 1] = FSAMPLE / LOWFREQDIV / bandFreqWidth / Div[band - 1];
+		samplesLeft -= NFreq[band - 1];
     }
 }
 
+// Q-pos for quarter circle (=FullCircle/4) = 11
+#define qN (QPOSCIRCLE - 2)
 
-#define qN 11
+// A : Q-pos for output
 #define qA PRECISION
+
+// p : Q-pos for parentheses intermediate (15)
 #define qP 15
+
+// r = 2n-p (7)
 #define qR (2*qN-qP)
+
+// s = A-1-p-n (17)
 #define qS (qN+qP+1-qA)
 
-int CQT::approxSin(int x) {
+// Returns in range of 0..1024 
+fixedpoint CQT::approxSin(int x) {
     // S(x) = x * ( (3<<p) - (x*x>>r) ) >> s
-    // n : Q-pos for quarter circle             11, so full circle is 2^13 long
-    // A : Q-pos for output                     10
-    // p : Q-pos for parentheses intermediate   15
-    // r = 2n-p                                  7
-    // s = A-1-p-n                              17
 
     x = x << (30 - qN);		// resize to pi range
     // shift to full s32 range (Q13->Q30)
@@ -125,8 +141,8 @@ void CQT::cqt() {
     int windowed, angle;
     float real_f, imag_f;
     fixedpoint real, imag;
-    for (k = 0; k < lowfreq_endIndex; ++k) {
-	indx = nrInterrupts % NRSAMPLES - 1 + 8 * NRSAMPLES;
+    for (k = 0; k < lowfreqEndIndex; ++k) {
+	indx = sampleIndex % NRSAMPLES - 1 + 8 * NRSAMPLES;
 	real = ALPHA - (BETA * signal_lowfreq[indx % NRSAMPLES] >> PRECISION);
 	imag = 0;
 	for (i = 1; i < NFreq[k]; ++i) {
@@ -138,10 +154,10 @@ void CQT::cqt() {
 
 	real_f = real / (float) SCALE;
 	imag_f = imag / (float) SCALE;
-	freqs[k] = logf(powf(real_f * real_f + imag_f * imag_f, 0.5) / NFreq[k] + 0.1) * amplitude / 32;
+	bandEnergy[k] = logf(powf(real_f * real_f + imag_f * imag_f, 0.5) / NFreq[k] + 0.1) * amplitude / 32;
     }
-    for (; k < FREQS; ++k) {
-	indx = nrInterrupts % NRSAMPLES - 1 + 8 * NRSAMPLES;
+    for (; k < NRBANDS; ++k) {
+	indx = sampleIndex % NRSAMPLES - 1 + 8 * NRSAMPLES;
 	real = ALPHA - (BETA * signal[indx % NRSAMPLES] >> PRECISION);
 	imag = 0;
 	for (i = 1; i < NFreq[k]; ++i) {
@@ -152,7 +168,7 @@ void CQT::cqt() {
 	}
 	real_f = real / (float) SCALE;
 	imag_f = imag / (float) SCALE;
-	freqs[k] = logf(powf(real_f * real_f + imag_f * imag_f, 0.5) / NFreq[k] + 0.1) * amplitude / 32;
+	bandEnergy[k] = logf(powf(real_f * real_f + imag_f * imag_f, 0.5) / NFreq[k] + 0.1) * amplitude / 32;
     }
 }
 

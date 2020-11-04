@@ -125,7 +125,7 @@ void global_fftTimer_callback(void *arg) {
 
       cqt->calculate();
       for (int idx=0;idx<FrequencyBands;idx++) {
-        Serial.printf("%03d ", cqt->freqs[idx]);
+        Serial.printf("%03d ", cqt->bandEnergy[idx]);
       }
       Serial.println("");
     } 

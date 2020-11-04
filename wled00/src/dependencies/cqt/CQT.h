@@ -1,51 +1,50 @@
-#include <inttypes.h>
-
 #ifndef CQT_h
 #define CQT_h
 
-// ---- Methods ----
+// Define type aliases
+#define fixedpoint int            // Fixedpoint value (multiplied by PRECISION)
 
-#define fixedpoint int
-#define u32 uint32_t
-
-#define int2PI (1<<13)		// So in our book, a circle is a full 8192 units long. The sinus functions is based on this property!
-#define PRECISION 10    // NOTE: Higher than 10 might give overflow for 32-bit numbers when multiplying... 10 = (*1024)
-#define LOWFREQDIV 8
-#define ALPHA ((7<<PRECISION)/13)	// 0.53836*(1<<PRECISION)       == 7168 / 13 = 551
-#define BETA ((6<<PRECISION)/13)	// 1-0.53836*(1<<PRECISION)     == 6144 / 13 = 472
+// Define constants
+#define QPOSCIRCLE 13             // Fixed point bits (2*PI)
+#define int2PI (1<<QPOSCIRCLE)    // So in our book, a circle is a full 8192 units long. The sinus functions is based on this property!
+#define PRECISION 10              // NOTE: Higher than 10 might give overflow for 32-bit numbers when multiplying... 10 = (*1024)
+#define LOWFREQDIV 8              // Lower-sampling-frequency divider
+#define ALPHA ((7<<PRECISION)/QPOSCIRCLE)	// 0.53836*(1<<PRECISION)       == 7168 / 13 = 551
+#define BETA ((6<<PRECISION)/QPOSCIRCLE)	// 1-0.53836*(1<<PRECISION)     == 6144 / 13 = 472
 #define SCALE (1<<PRECISION)      // == 1024
-#define FREQS 16    // Number of frequency bands
-#define FSAMPLE 22050
-#define lowFreqBound 132
-#define highFreqBound 3960
-#define NRSAMPLES 1024
-#define MAXTOTALSAMPLES 2048
-
+#define NRBANDS 48                // Number of frequency bands to calculate
+#define FSAMPLE 44100             // SampleRate of input
+#define lowFreqBound 20           // Lower frequency of interest
+#define highFreqBound 11025       // Upper frequency of interest
+#define NRSAMPLES 1024            // Size of samplebbufer
+#define MAXTOTALSAMPLES 2048      // Total number of samples sizeof(signal + signal_lowfreq)
 
 class CQT {
 public:
-  int signal[NRSAMPLES];		// current sample signal
-  int signal_lowfreq[NRSAMPLES];	// current sample signal, with a lower samplin frequency (see LOWFREQDIV)
-  int freqs[FREQS];		// frequencies for each band/filter
-  unsigned int nrInterrupts;
-  void init();
+  uint amplitude = 256;			      // Amplification of calculated bandEnergy [0-1024]
+  int signal[NRSAMPLES];		      // [input] Array of samples
+  int signal_lowfreq[NRSAMPLES];	// [input] Array of samples, with a lower sampling frequency (see LOWFREQDIV)
+  int bandEnergy[NRBANDS];	      // [output] Calculated energy for each band/filter
+  unsigned int sampleIndex;       // Counter of number of interrupts. Used for looping over the input-buffer
+  void init();                    
   void cqt();
   void adjustInputs();
+  void printFilters();
 private:
-  unsigned int F0, F16;	// minimum and maximum input frequencies
+  unsigned int F0;                // Lower-bound frequency of range of interest
+  unsigned int Fmax;	            // Upper-bound frequency of range of interest
+  uint32_t lowfreqEndIndex;       // Index of the band at which the lowfreq buffer is used
+  unsigned fixedpoint twoPiQ;	    // Calculated 2*pi*Q value for the CQT (Constant Q Transform)
+
+  unsigned int Freq[NRBANDS + 1];	// Lower frequency for each filter/band
+  unsigned int Div[NRBANDS];	    // Sample frequency divider for each filter
+  unsigned int NFreq[NRBANDS];	  // Number of samples needed for each filter
   
-  u32 lowfreq_endIndex = 0;
-
-  unsigned int Freq[FREQS + 1];	// lower and upper frequency for each filter/band
-  unsigned int Div[FREQS];	// sample frequency divider for each filter
-  unsigned int NFreq[FREQS];	// number of samples needed for each filter
-  unsigned fixedpoint twoPiQ;	// 2*pi*Q value for the CQT (Constant Q Transform)
-
-  u32 amplitude = 256;			// amplification of signal
   void preprocess_filters();
-  int32_t approxSin(int32_t x);
-  int32_t approxCos(int32_t in);
-  int32_t hamming(int32_t m, int32_t k);
+
+  fixedpoint approxSin(int x);          // Approximate SIN value
+  fixedpoint approxCos(fixedpoint in);  // Approximate COS value
+  fixedpoint hamming(int m, int k);     // Hamming window
 };
 
 #endif
