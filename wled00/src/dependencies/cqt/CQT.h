@@ -13,7 +13,7 @@
 #define BETA ((6<<PRECISION)/QPOSCIRCLE)	// 1-0.53836*(1<<PRECISION)     == 6144 / 13 = 472
 #define SCALE (1<<PRECISION)      // == 1024
 #define NRBANDS 48                // Number of frequency bands to calculate
-#define FSAMPLE 44100             // SampleRate of input
+#define FSAMPLE 22050             // SampleRate of input
 #define lowFreqBound 20           // Lower frequency of interest
 #define highFreqBound 11025       // Upper frequency of interest
 #define NRSAMPLES 1024            // Size of samplebbufer

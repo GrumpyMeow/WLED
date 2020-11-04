@@ -114,10 +114,45 @@ int32_t maxAmp = 512;
   }
 
   void SoundReactiveUsermod::loop() {
-    if (millis() - lastTime > 1000) {
-      //Serial.println("I'm alive!");
-      lastTime = millis();
-    }
+    delay(1);
+  }
+
+  void SoundReactiveUsermod::addToJsonInfo(JsonObject& root)
+  {
+    JsonObject user = root["u"];
+    if (user.isNull()) user = root.createNestedObject("u");
+
+    JsonArray amplitudeArr = user.createNestedArray("Max amplitude");
+    amplitudeArr.add(maxAmp);
+
+    JsonArray cqtBandsArr = user.createNestedArray("CQT bands");
+    cqtBandsArr.add(NRBANDS);
+
+    JsonArray i2sDataPinArr = user.createNestedArray("I2S data pin");
+    i2sDataPinArr.add(-1);
+  }
+
+
+  void SoundReactiveUsermod::addToJsonState(JsonObject& root)
+  {
+    root["sampleRate"] = FSAMPLE;
+    root["nrBands"] = NRBANDS;
+    root["amplitude"] = cqt->amplitude;
+    root["lowFreqBound"] = lowFreqBound;
+    root["highFreqBound"] = highFreqBound;
+  }
+
+
+  /*
+    * readFromJsonState() can be used to receive data clients send to the /json/state part of the JSON API (state object).
+    * Values in the state object may be modified by connected clients
+    */
+  void SoundReactiveUsermod::readFromJsonState(JsonObject& root)
+  {
+    //FSAMPLE = root["sampleRate"] ;
+    //cqt->amplitude = root["amplitude"] ;
+    //root["lowerFreq"] = 20;
+    //root["upperFreq"] = 11025;
   }  
 
   uint16_t SoundReactiveUsermod::getId()
