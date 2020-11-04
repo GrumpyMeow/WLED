@@ -135,24 +135,22 @@ int32_t maxAmp = 512;
 
   void SoundReactiveUsermod::addToJsonState(JsonObject& root)
   {
-    root["sampleRate"] = FSAMPLE;
-    root["nrBands"] = NRBANDS;
-    root["amplitude"] = cqt->amplitude;
-    root["lowFreqBound"] = lowFreqBound;
-    root["highFreqBound"] = highFreqBound;
+    JsonObject rve = root.createNestedObject("rve");    
+    rve["sampleRate"] = FSAMPLE;
+    rve["nrBands"] = NRBANDS;
+    rve["amplitude"] = cqt->amplitude;
+    rve["lowFreqBound"] = lowFreqBound;
+    rve["highFreqBound"] = highFreqBound;
   }
 
 
-  /*
-    * readFromJsonState() can be used to receive data clients send to the /json/state part of the JSON API (state object).
-    * Values in the state object may be modified by connected clients
-    */
   void SoundReactiveUsermod::readFromJsonState(JsonObject& root)
   {
-    //FSAMPLE = root["sampleRate"] ;
-    //cqt->amplitude = root["amplitude"] ;
-    //root["lowerFreq"] = 20;
-    //root["upperFreq"] = 11025;
+    JsonObject rve = root["rve"];
+    //FSAMPLE = rve["sampleRate"] ;
+    //cqt->amplitude = rve["amplitude"] ;
+    //? = rve["lowFreqBound"];
+    //? = rve["highFreqBound"];
   }  
 
   uint16_t SoundReactiveUsermod::getId()
