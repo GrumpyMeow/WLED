@@ -41,7 +41,6 @@ class SoundReactiveUsermod : public Usermod {
         .ws_io_num = I2S_WS_IO_NUM,    
         .data_out_num = I2S_DATA_OUT_NUM, 
         .data_in_num = I2S_IN_NUM   
-        
     };
 
     int Sample_I2S();
@@ -49,6 +48,12 @@ class SoundReactiveUsermod : public Usermod {
     void initCQT() ;
     void initTimers();
   public:
+    double fftResult[];
+    double fftBin[16];
+    double FFT_MajorPeak = 0;
+    double FFT_Magnitude = 0;
+
+
     // Public as to re-enter the object after callback  
     void sampleTimer_callback(void *arg);
     void fftTimer_callback(void *arg);

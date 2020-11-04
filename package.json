@@ -1,6 +1,6 @@
 {
   "name": "wled",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "description": "Tools for WLED project",
   "main": "tools/cdata.js",
   "directories": {
@@ -9,23 +9,25 @@
   },
   "scripts": {
     "build": "node tools/cdata.js",
-    "dev": "nodemon -e js,html,htm,css,png,jpg,gif,ico,js -w tools/ -w wled00/data/ -x node tools/cdata.js"
+    "dev": "nodemon -e js,html,htm,css,png,jpg,gif,ico,js -w tools/ -w wled00/data/ -x node tools/cdata.js",
+    "build:iconfont": "webfont ./icons/*.svg --font-name iconfont --template css --dest ./icons/iconfont --template-font-name iconfont --template-class-name icon --fotmats woff --font-height 48 --template-font-path '' --normalize"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Aircoookie/WLED.git"
+    "url": "git+https://github.com/atuline/WLED.git"
   },
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/Aircoookie/WLED/issues"
+    "url": "https://github.com/atuline/WLED/issues"
   },
-  "homepage": "https://github.com/Aircoookie/WLED#readme",
+  "homepage": "https://github.com/atuline/WLED#readme",
   "dependencies": {
     "clean-css": "^4.2.3",
     "html-minifier": "^4.0.0",
     "inliner": "^1.13.1",
     "nodemon": "^2.0.4",
+    "webfont": "^9.0.0",
     "zlib": "^1.0.5"
   }
 }

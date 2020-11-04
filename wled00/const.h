@@ -29,7 +29,7 @@
 #define AP_BEHAVIOR_ALWAYS        2            //Always open
 #define AP_BEHAVIOR_BUTTON_ONLY   3            //Only when button pressed for 6 sec
 
-//Notifier callMode 
+//Notifier callMode
 #define NOTIFIER_CALL_MODE_INIT           0    //no updates on init, can be used to disable updates
 #define NOTIFIER_CALL_MODE_DIRECT_CHANGE  1
 #define NOTIFIER_CALL_MODE_BUTTON         2
@@ -46,7 +46,7 @@
 #define RGBW_MODE_MANUAL_ONLY     0            //No automatic white channel calculation. Manual white channel slider
 #define RGBW_MODE_AUTO_BRIGHTER   1            //New algorithm. Adds as much white as the darkest RGBW channel
 #define RGBW_MODE_AUTO_ACCURATE   2            //New algorithm. Adds as much white as the darkest RGBW channel and subtracts this amount from each RGB channel
-#define RGBW_MODE_DUAL            3            //Manual slider + auto calculation. Automatically calculates only if manual slider is set to off (0)  
+#define RGBW_MODE_DUAL            3            //Manual slider + auto calculation. Automatically calculates only if manual slider is set to off (0)
 #define RGBW_MODE_LEGACY          4            //Old floating algorithm. Too slow for realtime and palette support
 
 //realtime modes
@@ -58,6 +58,7 @@
 #define REALTIME_MODE_ADALIGHT    5
 #define REALTIME_MODE_ARTNET      6
 #define REALTIME_MODE_TPM2NET     7
+#define REALTIME_MODE_DDP         8
 
 //realtime override modes
 #define REALTIME_OVERRIDE_NONE    0
@@ -100,8 +101,10 @@
 #define SEG_OPTION_SELECTED       0
 #define SEG_OPTION_REVERSED       1
 #define SEG_OPTION_ON             2
-#define SEG_OPTION_PAUSED         3            //unused
+#define SEG_OPTION_MIRROR         3            //Indicates that the effect will be mirrored within the segment
 #define SEG_OPTION_NONUNITY       4            //Indicates that the effect does not use FRAMETIME or needs getPixelColor
+#define SEG_OPTION_FREEZE         5            //Segment contents will not be refreshed
+#define SEG_OPTION_REACTIVE       6            //Reactive effects
 #define SEG_OPTION_TRANSITIONAL   7
 
 //Timer mode types
@@ -111,7 +114,12 @@
 #define NL_MODE_SUN               3            //Sunrise/sunset. Target brightness is set immediately, then Sunrise effect is started. Max 60 min.
 
 //EEPROM size
-#define EEPSIZE 2610  //Maximum is 4096
+#ifdef ESP8266
+#define EEPSIZE 3300  //Maximum is 4096
+#else // ESP8266
+#define EEPSIZE 3300  //Maximum is 4096
+#endif // ESP32
+
 
 #define NTP_PACKET_SIZE 48
 
@@ -125,5 +133,14 @@
 #define E131_MAX_UNIVERSE_COUNT 9
 
 #define ABL_MILLIAMPS_DEFAULT 850; // auto lower brightness to stay close to milliampere limit
+
+#define TOUCH_THRESHOLD 32 // limit to recognize a touch, higher value means more sensitive
+
+// Size of buffer for API JSON object (increase for more segments)
+#ifdef ESP8266
+  #define JSON_BUFFER_SIZE 9216
+#else
+  #define JSON_BUFFER_SIZE 16384
+#endif
 
 #endif
