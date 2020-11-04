@@ -20,16 +20,9 @@
 
 class SoundReactiveUsermod : public Usermod {
   private:
-    unsigned long lastTime = 0;
-
     // Constant Q Transform object
     CQT *cqt;
-
-    uint16_t sampleIndex = 1;
-    uint16_t fftIndex = 0;
-    
-    int sampleBuffer[SampleBufferSize];
-
+   
     int32_t i2sBuffer[I2S_BLOCK_SIZE];
     const i2s_port_t I2S_PORT = I2S_NUM; 
     const i2s_config_t i2s_config = {
@@ -51,7 +44,7 @@ class SoundReactiveUsermod : public Usermod {
         
     };
 
-    int32_t Sample_I2S();
+    int Sample_I2S();
     void initSound() ;
     void initCQT() ;
     void initTimers();
@@ -62,5 +55,8 @@ class SoundReactiveUsermod : public Usermod {
 
     void setup(); 
     void loop();
+    void addToJsonInfo(JsonObject& root);
+    void addToJsonState(JsonObject& root);
+    void readFromJsonState(JsonObject& root);
     uint16_t getId();    
 };

@@ -114,10 +114,43 @@ int32_t maxAmp = 512;
   }
 
   void SoundReactiveUsermod::loop() {
-    if (millis() - lastTime > 1000) {
-      //Serial.println("I'm alive!");
-      lastTime = millis();
-    }
+    delay(1);
+  }
+
+  void SoundReactiveUsermod::addToJsonInfo(JsonObject& root)
+  {
+    JsonObject user = root["u"];
+    if (user.isNull()) user = root.createNestedObject("u");
+
+    JsonArray amplitudeArr = user.createNestedArray("Max amplitude");
+    amplitudeArr.add(maxAmp);
+
+    JsonArray cqtBandsArr = user.createNestedArray("CQT bands");
+    cqtBandsArr.add(NRBANDS);
+
+    JsonArray i2sDataPinArr = user.createNestedArray("I2S data pin");
+    i2sDataPinArr.add(-1);
+  }
+
+
+  void SoundReactiveUsermod::addToJsonState(JsonObject& root)
+  {
+    JsonObject rve = root.createNestedObject("rve");    
+    rve["sampleRate"] = FSAMPLE;
+    rve["nrBands"] = NRBANDS;
+    rve["amplitude"] = cqt->amplitude;
+    rve["lowFreqBound"] = lowFreqBound;
+    rve["highFreqBound"] = highFreqBound;
+  }
+
+
+  void SoundReactiveUsermod::readFromJsonState(JsonObject& root)
+  {
+    JsonObject rve = root["rve"];
+    //FSAMPLE = rve["sampleRate"] ;
+    //cqt->amplitude = rve["amplitude"] ;
+    //? = rve["lowFreqBound"];
+    //? = rve["highFreqBound"];
   }  
 
   uint16_t SoundReactiveUsermod::getId()
