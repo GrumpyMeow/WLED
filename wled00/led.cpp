@@ -11,6 +11,9 @@ void setValuesFromMainSeg()
   effectCurrent = seg.mode;
   effectSpeed = seg.speed;
   effectIntensity = seg.intensity;
+  effectFFT1 = seg.fft1;
+  effectFFT2 = seg.fft2;
+  effectFFT3 = seg.fft3;
   effectPalette = seg.palette;
 }
 
@@ -88,7 +91,7 @@ void colorUpdated(int callMode)
       callMode != NOTIFIER_CALL_MODE_DIRECT_CHANGE && 
       callMode != NOTIFIER_CALL_MODE_NO_NOTIFY) strip.applyToAllSelected = true; //if not from JSON api, which directly sets segments
   
-  bool fxChanged = strip.setEffectConfig(effectCurrent, effectSpeed, effectIntensity, effectPalette);
+  bool fxChanged = strip.setEffectConfig(effectCurrent, effectSpeed, effectIntensity, effectFFT1, effectFFT2, effectFFT3, effectPalette);
   bool colChanged = colorChanged();
 
   if (fxChanged || colChanged)
@@ -225,7 +228,7 @@ void handleNightlight()
       nightlightDelayMs = (int)(nightlightDelayMins*60000);
       nightlightActiveOld = true;
       briNlT = bri;
-      for (byte i=0; i<4; i++) colNlT[i] = col[i];                                     // remember starting color
+      for (byte i=0; i<4; i++) colNlT[i] = col[i]; // remember starting color
       if (nightlightMode == NL_MODE_SUN)
       {
         //save current
@@ -233,6 +236,7 @@ void handleNightlight()
         colNlT[1] = effectSpeed;
         colNlT[2] = effectPalette;
 
+        strip.setMode(strip.getMainSegmentId(), FX_MODE_STATIC); //make sure seg runtime is reset if left in sunrise mode
         effectCurrent = FX_MODE_SUNRISE;
         effectSpeed = nightlightDelayMins;
         effectPalette = 0;
@@ -291,11 +295,19 @@ void handleNightlight()
   //also handle preset cycle here
   if (presetCyclingEnabled && (millis() - presetCycledTime > (100*presetCycleTime)))
   {
-    if (presetCycCurr < presetCycleMin) presetCycCurr = presetCycleMin;
+    presetCycledTime = millis();
+    if (bri == 0 || nightlightActive) return;
+
+    if (presetCycCurr < presetCycleMin || presetCycCurr > presetCycleMax) presetCycCurr = presetCycleMin;
     applyPreset(presetCycCurr,presetApplyBri);
-    presetCycCurr++; if (presetCycCurr > presetCycleMax) presetCycCurr = presetCycleMin;
+    presetCycCurr++;
     if (presetCycCurr > 16) presetCycCurr = 1;
     colorUpdated(NOTIFIER_CALL_MODE_PRESET_CYCLE);
-    presetCycledTime = millis();
   }
+}
+
+//utility for FastLED to use our custom timer
+uint32_t get_millisecond_timer()
+{
+  return strip.now;
 }

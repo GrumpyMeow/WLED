@@ -51,13 +51,13 @@
 			for (i = 0; i < l; i++) {
 				myC[i].style.display = (d.getElementById('rgbw').checked) ? 'inline':'none';
 			}
-      
+
       d.getElementById('ledwarning').style.display = (d.Sf.LC.value > 1000) ? 'inline':'none';
       d.getElementById('ampwarning').style.display = (d.Sf.MA.value > 7200) ? 'inline':'none';
-	  
+
 	  if (d.Sf.LA.value == 255) laprev = 12;
 	  else if (d.Sf.LA.value > 0) laprev = d.Sf.LA.value;
-			
+
 			var val = Math.ceil((100 + d.Sf.LC.value * laprev)/500)/2;
 			val = (val > 5) ? Math.ceil(val) : val;
 			var s = "";
@@ -79,7 +79,19 @@
       s2 += "A is enough)<br>";
 			d.getElementById('psu').innerHTML = s;
       d.getElementById('psu2').innerHTML = isWS2815 ? "" : s2;
-		}
+
+      var LCW = parseInt(d.Sf.LCW.value, 10)
+	  var LCH = parseInt(d.Sf.LCH.value, 10)
+	  if (!isNaN(LCW) && !isNaN(LCH) && (LCW > 0 || LCH > 0) && LCW * LCH != parseInt(d.Sf.LC.value, 10)) {
+		d.getElementById('2dwarning').style.display = 'inline';
+		d.getElementById('submitButton').disabled = false;
+		d.getElementById('submitButton2').disabled = false;
+	  } else {
+		d.getElementById('2dwarning').style.display = 'none';
+		d.getElementById('submitButton').disabled = false;
+		d.getElementById('submitButton2').disabled = false;
+	  }
+	    }
 		function GetV()
 		{
 			//values injected by server while sending HTML
@@ -101,7 +113,14 @@
       </div>
 		<i>Recommended power supply for brightest white:</i><br>
 		<b><span id="psu">?</span></b><br>
-    <span id="psu2"><br></span>
+	<span id="psu2"><br></span>
+	<h3>2D Matrix</h3>
+		<input name="LCW" type="number" min="1" max="1500" oninput="UI()"> x
+		<input name="LCH" type="number" min="1" max="1500" oninput="UI()"><br>
+		<div id="2dwarning" style="color: orange; display: inline;">
+			&#9888; width x height should match LED count!<br>
+		</div>
+		Serpentine: <input type="checkbox" name="LCWHS" checked> (how leds are layed out)<br>
     <br>
     Enable automatic brightness limiter: <input type="checkbox" name="ABen" onchange="enABL()" id="able"><br>
     <div id="abl">
@@ -130,7 +149,15 @@
     <br>
 		LEDs are 4-channel type (RGBW): <input type="checkbox" name="EW" onchange=UI() id="rgbw"><br>
     <span class="wc">
-		Auto-calculate white channel from RGB: <input type="checkbox" name="AW"><br></span>
+    Auto-calculate white channel from RGB:<br>
+    <select name=AW>
+      <option value=0>None</option>
+      <option value=1>Brighter</option>
+      <option value=2>Accurate</option>
+      <option value=3>Dual</option>
+      <option value=4>Legacy</option>
+    </select>
+    <br></span>
 		Color order:
 		<select name="CO">
 			<option value=0>GRB</option>

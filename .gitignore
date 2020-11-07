@@ -11,3 +11,11 @@
 .clang-format
 node_modules
 wled00/wled00.ino.cpp
+.cproject
+.project
+
+# We don't use these iconfont-files
+icons/iconfont/iconfont.eot
+icons/iconfont/iconfont.svg
+icons/iconfont/iconfont.ttf
+icons/iconfont/iconfont.woff2
