@@ -15,15 +15,15 @@
 		"ms-vscode.cpptools",
 		"platformio.platformio-ide",
 		"bierner.markdown-preview-github-styles"
-	]
+	],
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	// "forwardPorts": [],
+	"forwardPorts": [8008],
 
 	// Use 'postCreateCommand' to run commands after the container is created.
 	// "postCreateCommand": "gcc -v",
 
 	// Uncomment to connect as a non-root user. See https://aka.ms/vscode-remote/containers/non-root.
-	// "remoteUser": "vscode"
+	"remoteUser": "vscode"
 
 }
