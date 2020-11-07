@@ -1,33 +1,52 @@
-#-------------------------------------------------------------------------------------------------------------
-# Copyright (c) Microsoft Corporation. All rights reserved.
-# Licensed under the MIT License. See https://go.microsoft.com/fwlink/?linkid=2090316 for license information.
-#-------------------------------------------------------------------------------------------------------------
+FROM debian:bullseye-slim
 
-FROM mcr.microsoft.com/vscode/devcontainers/base:0-buster
-
-# This Dockerfile's base image has a non-root user with sudo access. Use the "remoteUser"
-# property in devcontainer.json to use it. On Linux, the container user's GID/UIDs
-# will be updated to match your local UID/GID (when using the dockerFile property).
-# See https://aka.ms/vscode-remote/containers/non-root-user for details.
 ARG USERNAME=vscode
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-# Configure apt and install packages
+
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
-    && export DEBIAN_FRONTEND=noninteractive \
-    #
-    # Install C++ tools
-    && apt-get -y install build-essential cmake cppcheck valgrind python3-distutils nodejs npm \
-    #
-    # [Optional] Update UID/GID if needed
-    && if [ "$USER_GID" != "1000" ] || [ "$USER_UID" != "1000" ]; then \
-        groupmod --gid $USER_GID $USERNAME \
-        && usermod --uid $USER_UID --gid $USER_GID $USERNAME \
-        && chown -R $USER_UID:$USER_GID /home/$USERNAME; \
-    fi \
-    #
+    && apt-get -qqy install \
+        # Common stuff
+        apt-utils \
+        build-essential \
+        ca-certificates \
+        curl \
+        dialog \
+        git \
+        sudo \
+        unzip \
+        wget \
+        # for platformio
+        bc \
+        build-essential \
+        clang \
+        curl \
+        gcc \
+        python3 \
+        python3-dev \
+        python3-distutils \
+        python3-pip \
+        srecord \
+        xz-utils \
     # Clean up
     && apt-get autoremove -y \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
+ENV DEBIAN_FRONTEND=dialog
+
+RUN if [ ${USER_UID:-0} -ne 0 ] && [ ${USER_GID:-0} -ne 0 ]; then \
+        groupadd --gid $USER_GID $USERNAME \
+        && useradd -s /bin/bash --uid $USER_UID --gid $USER_GID -m $USERNAME \
+        && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME\
+        && chmod 0440 /etc/sudoers.d/$USERNAME \
+    ; fi
+
+# https://docs.platformio.org/en/latest/faq.html#platformio-udev-rules
+RUN curl -fLo /etc/udev/rules.d/99-platformio-udev.rules --create-dirs https://raw.githubusercontent.com/platformio/platformio-core/master/scripts/99-platformio-udev.rules \
+    && usermod -a -G dialout $USERNAME \
+    && usermod -a -G plugdev $USERNAME
+
+USER $USERNAME
+RUN python3 -c "$(curl -fsSL https://raw.githubusercontent.com/platformio/platformio/develop/scripts/get-platformio.py)"
