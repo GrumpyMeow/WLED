@@ -15,6 +15,7 @@ void setValuesFromMainSeg()
   effectFFT2 = seg.fft2;
   effectFFT3 = seg.fft3;
   effectPalette = seg.palette;
+  effectReactive = seg.reactive;
 }
 
 

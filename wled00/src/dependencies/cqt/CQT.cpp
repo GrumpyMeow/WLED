@@ -19,27 +19,27 @@ void CQT::init() {
 	    Div[k] = 1;		
     }
 
-	adjustInputs();
+	adjustInputs(DEFAULT_AMPLITUDE, LOWFREQBOUND, HIGHFREQBOUND);
 }
 
-void CQT::adjustInputs() {
+void CQT::adjustInputs(uint newAmplitude, uint newLowFreq, uint newHighFreq) {
 
-    unsigned int minF = 0; // readpin
-    unsigned int maxF = 44100; // readpin
+    uint minF = newLowFreq; 
+    uint maxF = newHighFreq; 
 
 	float base = 1.0091;
 	minF = powf(base, minF);
 	maxF = powf(base, maxF);
-	if (minF < lowFreqBound) {
-		minF = lowFreqBound;
+	if (minF < LOWFREQBOUND) {
+		minF = LOWFREQBOUND;
 	}
-	if (maxF > highFreqBound) {
-		maxF = highFreqBound;
+	if (maxF > HIGHFREQBOUND) {
+		maxF = HIGHFREQBOUND;
 	}
 	if (2 * minF > maxF) {	// at least one octave will always be displayed.
-		if (2 * minF > highFreqBound) {
-			maxF = highFreqBound;
-			minF = highFreqBound / 2;
+		if (2 * minF > HIGHFREQBOUND) {
+			maxF = HIGHFREQBOUND;
+			minF = HIGHFREQBOUND / 2;
 		} else {
 			maxF = 2 * minF;
 		}
@@ -50,6 +50,7 @@ void CQT::adjustInputs() {
 
 	F0 = minF;
 	Fmax = maxF;
+	amplitude = newAmplitude;
 	preprocess_filters();
 }
 

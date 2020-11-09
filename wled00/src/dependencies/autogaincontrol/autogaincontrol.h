@@ -3,6 +3,8 @@
 
 class autogaincontrol {
 public:
+    float AgcMultiplier() const { return multAgc; }
+
     void init();    
     int process(int sample);
     void print();

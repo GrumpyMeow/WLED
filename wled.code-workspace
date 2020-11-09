@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"*.def": "cpp",
+			"*.tcc": "cpp",
+			"algorithm": "cpp",
+			"functional": "cpp"
+		}
+	}
+}

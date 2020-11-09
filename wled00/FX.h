@@ -30,6 +30,13 @@
 #include "NpbWrapper.h"
 #include "const.h"
 
+extern uint8_t NrBands;
+extern int BandEnergy[];
+extern uint8_t reactiveIntensity;
+extern bool reactivePeak;
+extern uint8_t reactivePeakIntensity;
+
+
 #define FASTLED_INTERNAL //remove annoying pragma messages
 #define USE_GET_MILLISECOND_TIMER
 #include "FastLED.h"
@@ -100,6 +107,7 @@
 // bit    0: segment is selected
 #define NO_OPTIONS   (uint8_t)0x00
 #define TRANSITIONAL (uint8_t)0x80
+#define REACTIVE     (uint8_t)0x40
 #define MIRROR       (uint8_t)0x08
 #define SEGMENT_ON   (uint8_t)0x04
 #define REVERSE      (uint8_t)0x02
@@ -109,6 +117,7 @@
 #define IS_SEGMENT_ON   ((SEGMENT.options & SEGMENT_ON  ) == SEGMENT_ON  )
 #define IS_REVERSE      ((SEGMENT.options & REVERSE     ) == REVERSE     )
 #define IS_SELECTED     ((SEGMENT.options & SELECTED    ) == SELECTED    )
+#define IS_REACTIVE     ((SEGMENT.options & REACTIVE    ) == REACTIVE    )
 
 #define MODE_COUNT                     143
 
@@ -257,19 +266,6 @@
 #define FX_FFT_TEST                    142
 
 
-// Sound reactive variables
-static bool reactivePeak; // True to indicate a peak has been detected
-static int sample;
-static uint8_t reactiveIntensity;       // [0..255] Intensity based on (sound) input. This value will decrease over time, until a new sample with a higher amplitude is sampled. 
-static float sampleAvg;
-static uint8_t myVals[32];
-static int sampleAgc;
-static uint8_t squelch;
-static double FFT_MajorPeak;
-static double FFT_Magnitude;
-static double fftBin[16];                     // raw FFT data
-static double fftResult[16];                  // summary of bins array. 16 summary bins.
-
 
 class WS2812FX {
   typedef uint16_t (WS2812FX::*mode_ptr)(void);
@@ -291,6 +287,7 @@ class WS2812FX {
       uint8_t mode;
       uint8_t options; //bit pattern: msb first: transitional needspixelstate tbd tbd (paused) on reverse selected
       uint8_t grouping, spacing;
+      bool reactive;
       uint8_t opacity;
       uint32_t colors[NUM_COLORS];
       void setOption(uint8_t n, bool val)
@@ -330,15 +327,7 @@ class WS2812FX {
           vLength = (vLength + 1) /2;  // divide by 2 if mirror, leave at least a single LED
         return vLength;
       }
-      uint8_t getIntensity() {        
-        #ifdef WLED_ENABLE_SOUND
-        if (getOption(6)) { // Is Reactive enabled?
-          // Calculate Reactive intensity
-          return (intensity*reactiveIntensity) / 255 ;
-        }
-        #endif
-        return intensity;
-      }
+      uint8_t getIntensity();
     } segment;
 
   // segment runtime parameters
@@ -563,6 +552,7 @@ class WS2812FX {
       gammaCorrectCol = true,
       applyToAllSelected = true,
       segmentsAreIdentical(Segment* a, Segment* b),
+      getReactivePeak(),
       setEffectConfig(uint8_t m, uint8_t s, uint8_t i, uint8_t f1, uint8_t f2, uint8_t f3, uint8_t p);
 
     uint8_t
@@ -575,12 +565,14 @@ class WS2812FX {
       getBrightness(void),
       getMode(void),
       getSpeed(void),
+      getIntensity(),
       getModeCount(void),
       getPaletteCount(void),
       getMaxSegments(void),
       //getFirstSelectedSegment(void),
       getMainSegmentId(void),
       gamma8(uint8_t),
+      getPeakIntensity(),
       get_random_wheel_index(uint8_t);
 
     int8_t

@@ -29,12 +29,45 @@
 #define IBN 5100
 #define PALETTE_SOLID_WRAP (paletteBlend == 1 || paletteBlend == 3)
 
+
+
+uint8_t WS2812FX::getIntensity() {        
+        #ifdef WLED_ENABLE_SOUND
+          if (IS_REACTIVE) { // Is Reactive enabled?
+            // Calculate Reactive intensity
+            int ri = (SEGMENT.intensity * reactiveIntensity) >> 8 ;
+            return ri;
+        }
+        #endif
+        return SEGMENT.intensity;
+}
+
+bool WS2812FX::getReactivePeak() {        
+        #ifdef WLED_ENABLE_SOUND
+          if (IS_REACTIVE) { // Is Reactive enabled?
+            reactivePeak = false; // reset peak
+            return reactivePeak;
+        }
+        #endif
+        return false;
+}
+
+uint8_t WS2812FX::getPeakIntensity() {        
+        #ifdef WLED_ENABLE_SOUND
+          if (IS_REACTIVE) { // Is Reactive enabled?
+            return reactivePeakIntensity;
+        }
+        #endif
+        return 0;
+}
+
+
 /*
  * No blinking. Just plain old static light.
  */
 uint16_t WS2812FX::mode_static(void) {
-  if (SEGMENT.getOption(6)) {
-    uint16_t brightness = SEGMENT.getIntensity();
+  if (IS_REACTIVE) {
+    uint16_t brightness = getIntensity();
     uint32_t c = color_blend(0,SEGCOLOR(0), brightness);
 
     for(uint16_t i = 0; i < SEGLEN; i++) {
@@ -61,17 +94,16 @@ uint16_t WS2812FX::blink(uint32_t color1, uint32_t color2, bool strobe, bool do_
   uint32_t offTime = cycleTime;
 
   if (!strobe) {
-    onTime = (cycleTime * SEGMENT.getIntensity()) >> 8;
+    onTime = (cycleTime * getIntensity()) >> 8;
     offTime = cycleTime - onTime;
   }
 
   stateTime = ((SEGENV.aux0 & 1) == 0) ? onTime : offTime;
   stateTime += 20;
 
-  if ((!SEGMENT.getOption(6) && now - SEGENV.step > stateTime ) ||  
-    ( SEGMENT.getOption(6) && reactivePeak))
+  if ((!IS_REACTIVE && now - SEGENV.step > stateTime ) ||  
+    ( getReactivePeak()))
   {
-    reactivePeak = false;
     SEGENV.aux0++;
     SEGENV.aux1 = stateTime;
     SEGENV.step = now;
@@ -157,7 +189,7 @@ uint16_t WS2812FX::color_wipe(bool rev, bool useRandomColors) {
   uint16_t ledIndex = (prog * SEGLEN) >> 15;
   uint16_t rem = 0;
   rem = (prog * SEGLEN) * 2; //mod 0xFFFF
-  rem /= (SEGMENT.getIntensity() +1);
+  rem /= (getIntensity() +1);
   if (rem > 255) rem = 255;
 
   uint32_t col1 = useRandomColors? color_wheel(SEGENV.aux1) : SEGCOLOR(1);
@@ -219,7 +251,7 @@ uint16_t WS2812FX::mode_random_color(void) {
   uint32_t cycleTime = 200 + (255 - SEGMENT.speed)*50;
   uint32_t it = now / cycleTime;
   uint32_t rem = now % cycleTime;
-  uint16_t fadedur = (cycleTime * SEGMENT.getIntensity()) >> 8;
+  uint16_t fadedur = (cycleTime * getIntensity()) >> 8;
 
   uint32_t fade = 255;
   if (fadedur) {
@@ -259,7 +291,7 @@ uint16_t WS2812FX::mode_dynamic(void) {
   if (it != SEGENV.step && SEGMENT.speed != 0) //new color
   {
     for (uint16_t i = 0; i < SEGLEN; i++) {
-      if (random8() <= SEGMENT.getIntensity()) SEGENV.data[i] = random8();
+      if (random8() <= getIntensity()) SEGENV.data[i] = random8();
     }
     SEGENV.step = it;
   }
@@ -315,7 +347,7 @@ uint16_t WS2812FX::scan(bool dual)
   uint32_t cycleTime = 750 + (255 - SEGMENT.speed)*150;
   uint32_t perc = now % cycleTime;
   uint16_t prog = (perc * 65535) / cycleTime;
-  uint16_t size = 1 + ((SEGMENT.getIntensity() * SEGLEN) >> 9);
+  uint16_t size = 1 + ((getIntensity() * SEGLEN) >> 9);
   uint16_t ledIndex = (prog * ((SEGLEN *2) - size *2)) >> 16;
 
   fill(SEGCOLOR(1));
@@ -361,8 +393,8 @@ uint16_t WS2812FX::mode_rainbow(void) {
   uint16_t counter = (now * ((SEGMENT.speed >> 2) +2)) & 0xFFFF;
   counter = counter >> 8;
 
-  if (SEGMENT.getIntensity() < 128){
-    fill(color_blend(color_wheel(counter),WHITE,128-SEGMENT.getIntensity()));
+  if (getIntensity() < 128){
+    fill(color_blend(color_wheel(counter),WHITE,128-getIntensity()));
   } else {
     fill(color_wheel(counter));
   }
@@ -380,7 +412,7 @@ uint16_t WS2812FX::mode_rainbow_cycle(void) {
 
   for(uint16_t i = 0; i < SEGLEN; i++) {
     //intensity/29 = 0 (1/16) 1 (1/8) 2 (1/4) 3 (1/2) 4 (1) 5 (2) 6 (4) 7 (8) 8 (16)
-    uint8_t index = (i * (16 << (SEGMENT.getIntensity() /29)) / SEGLEN) + counter;
+    uint8_t index = (i * (16 << (getIntensity() /29)) / SEGLEN) + counter;
     setPixelColor(i, color_wheel(index));
   }
 
@@ -392,7 +424,7 @@ uint16_t WS2812FX::mode_rainbow_cycle(void) {
  * theater chase function
  */
 uint16_t WS2812FX::theater_chase(uint32_t color1, uint32_t color2, bool do_palette) {
-  byte gap = 2 + ((255 - SEGMENT.getIntensity()) >> 5);
+  byte gap = 2 + ((255 - getIntensity()) >> 5);
   uint32_t cycleTime = 50 + (255 - SEGMENT.speed)*2;
   uint32_t it = now / cycleTime;
   if (it != SEGENV.step) //new color
@@ -439,7 +471,7 @@ uint16_t WS2812FX::mode_theater_chase_rainbow(void) {
  * Running lights effect with smooth sine transition base.
  */
 uint16_t WS2812FX::running_base(bool saw) {
-  uint8_t x_scale = SEGMENT.getIntensity() >> 2;
+  uint8_t x_scale = getIntensity() >> 2;
   uint32_t counter = (now * SEGMENT.speed) >> 9;
 
   for(uint16_t i = 0; i < SEGLEN; i++) {
@@ -487,7 +519,7 @@ uint16_t WS2812FX::mode_twinkle(void) {
   uint32_t it = now / cycleTime;
   if (it != SEGENV.step)
   {
-    uint16_t maxOn = map(SEGMENT.getIntensity(), 0, 255, 1, SEGLEN); // make sure at least one LED is on
+    uint16_t maxOn = map(getIntensity(), 0, 255, 1, SEGLEN); // make sure at least one LED is on
     if (SEGENV.aux0 >= maxOn)
     {
       SEGENV.aux0 = 0;
@@ -519,7 +551,7 @@ uint16_t WS2812FX::dissolve(uint32_t color) {
 
   for (uint16_t j = 0; j <= SEGLEN / 15; j++)
   {
-    if (random8() <= SEGMENT.getIntensity()) {
+    if (random8() <= getIntensity()) {
       for (uint8_t times = 0; times < 10; times++) //attempt to spawn a new pixel 5 times
       {
         uint16_t i = random16(SEGLEN);
@@ -656,7 +688,7 @@ uint16_t WS2812FX::mode_android(void) {
     setPixelColor(i, color_from_palette(i, true, PALETTE_SOLID_WRAP, 1));
   }
 
-  if (SEGENV.aux1 > ((float)SEGMENT.getIntensity()/255.0)*(float)SEGLEN)
+  if (SEGENV.aux1 > ((float)getIntensity()/255.0)*(float)SEGLEN)
   {
     SEGENV.aux0 = 1;
   } else
@@ -718,7 +750,7 @@ uint16_t WS2812FX::chase(uint32_t color1, uint32_t color2, uint32_t color3, bool
   SEGENV.step = a;
 
   // Use intensity setting to vary chase up to 1/2 string length
-  uint8_t size = 1 + (SEGMENT.getIntensity() * SEGLEN >> 10);
+  uint8_t size = 1 + (getIntensity() * SEGLEN >> 10);
 
   uint16_t b = a + size; //"trail" of chase, filled with color1
   if (b > SEGLEN) b -= SEGLEN;
@@ -815,7 +847,7 @@ uint16_t WS2812FX::mode_chase_rainbow_white(void) {
  */
 uint16_t WS2812FX::mode_colorful(void) {
   uint32_t cols[]{0x00FF0000,0x00EEBB00,0x0000EE00,0x000077CC,0x00FF0000,0x00EEBB00,0x0000EE00};
-  if (SEGMENT.getIntensity() < 127) //pastel (easter) colors
+  if (getIntensity() < 127) //pastel (easter) colors
   {
     cols[0] = 0x00FF8040;
     cols[1] = 0x00E5D241;
@@ -881,7 +913,7 @@ uint16_t WS2812FX::mode_traffic_light(void) {
   if (now - SEGENV.step > mdelay)
   {
     SEGENV.aux0++;
-    if (SEGENV.aux0 == 1 && SEGMENT.getIntensity() > 140) SEGENV.aux0 = 2; //skip Red + Amber, to get US-style sequence
+    if (SEGENV.aux0 == 1 && getIntensity() > 140) SEGENV.aux0 = 2; //skip Red + Amber, to get US-style sequence
     if (SEGENV.aux0 > 3) SEGENV.aux0 = 0;
     SEGENV.step = now;
   }
@@ -957,7 +989,7 @@ uint16_t WS2812FX::mode_chase_flash_random(void) {
  * Alternating pixels running function.
  */
 uint16_t WS2812FX::running(uint32_t color1, uint32_t color2) {
-  uint8_t pxw = 1 + (SEGMENT.getIntensity() >> 5);
+  uint8_t pxw = 1 + (getIntensity() >> 5);
   uint32_t cycleTime = 35 + (255 - SEGMENT.speed);
   uint32_t it = now / cycleTime;
   if (SEGMENT.speed == 0) it = 0;
@@ -1034,7 +1066,7 @@ uint16_t WS2812FX::mode_running_random(void) {
   }
 
   SEGENV.step++;
-  if (SEGENV.step > ((255-SEGMENT.getIntensity()) >> 4))
+  if (SEGENV.step > ((255-getIntensity()) >> 4))
   {
     SEGENV.step = 0;
   }
@@ -1055,7 +1087,7 @@ uint16_t WS2812FX::larson_scanner(bool dual) {
   uint16_t counter = now * ((SEGMENT.speed >> 2) +8);
   uint16_t index = counter * SEGLEN  >> 16;
 
-  fade_out(SEGMENT.getIntensity());
+  fade_out(getIntensity());
 
   if (SEGENV.step > index && SEGENV.step - index > SEGLEN/2) {
     SEGENV.aux0 = !SEGENV.aux0;
@@ -1092,7 +1124,7 @@ uint16_t WS2812FX::mode_comet(void) {
   uint16_t index = counter * SEGLEN >> 16;
   if (SEGENV.call == 0) SEGENV.aux0 = index;
 
-  fade_out(SEGMENT.getIntensity());
+  fade_out(getIntensity());
 
   setPixelColor( index, color_from_palette(index, true, PALETTE_SOLID_WRAP, 0));
   if (index > SEGENV.aux0) {
@@ -1129,7 +1161,7 @@ uint16_t WS2812FX::mode_fireworks() {
   if (valid2) setPixelColor(SEGENV.aux1, sv2);
 
   for(uint16_t i=0; i<MAX(1, SEGLEN/20); i++) {
-    if(random8(129 - (SEGMENT.getIntensity() >> 1)) == 0) {
+    if(random8(129 - (getIntensity() >> 1)) == 0) {
       uint16_t index = random(SEGLEN);
       setPixelColor(index, color_from_palette(random8(), false, false, 0));
       SEGENV.aux1 = SEGENV.aux0;
@@ -1176,7 +1208,7 @@ uint16_t WS2812FX::mode_fire_flicker(void) {
   byte g = (SEGCOLOR(0) >>  8) & 0xFF;
   byte b = (SEGCOLOR(0)        & 0xFF);
   byte lum = (SEGMENT.palette == 0) ? MAX(w, MAX(r, MAX(g, b))) : 255;
-  lum /= (((256-SEGMENT.getIntensity())/16)+1);
+  lum /= (((256-getIntensity())/16)+1);
   for(uint16_t i = 0; i < SEGLEN; i++) {
     byte flicker = random8(lum);
     if (SEGMENT.palette == 0) {
@@ -1199,7 +1231,7 @@ uint16_t WS2812FX::gradient_base(bool loading) {
   uint16_t pp = counter * SEGLEN >> 16;
   if (SEGENV.call == 0) pp = 0;
   float val; //0.0 = sec 1.0 = pri
-  float brd = loading ? SEGMENT.getIntensity() : SEGMENT.getIntensity()/2;
+  float brd = loading ? getIntensity() : getIntensity()/2;
   if (brd <1.0) brd = 1.0;
   int p1 = pp-SEGLEN;
   int p2 = pp+SEGLEN;
@@ -1257,7 +1289,7 @@ uint16_t WS2812FX::police_base(uint32_t color1, uint32_t color2, bool all)
       for (uint16_t i = idexB; i < idexR; i++) setPixelColor(i, color2);
     }
   } else { //regular dot-only mode
-    uint8_t size = 1 + SEGMENT.getIntensity() >> 3;
+    uint8_t size = 1 + getIntensity() >> 3;
     if (size > SEGLEN/2) size = 1+ SEGLEN/2;
     for (uint8_t i=0; i <= size; i++) {
       setPixelColor(idexR+i, color1);
@@ -1318,7 +1350,7 @@ uint16_t WS2812FX::mode_two_dots()
 uint16_t WS2812FX::tricolor_chase(uint32_t color1, uint32_t color2) {
   uint32_t cycleTime = 50 + (255 - SEGMENT.speed)*2;
   uint32_t it = now / cycleTime;
-  uint8_t width = (1 + SEGMENT.getIntensity()/32) * 3; //value of 1-8 for each colour
+  uint8_t width = (1 + getIntensity()/32) * 3; //value of 1-8 for each colour
   uint8_t index = it % width;
 
   for(uint16_t i = 0; i < SEGLEN; i++, index++) {
@@ -1356,7 +1388,7 @@ uint16_t WS2812FX::mode_tricolor_chase(void) {
  */
 uint16_t WS2812FX::mode_icu(void) {
   uint16_t dest = SEGENV.step & 0xFFFF;
-  uint8_t space = (SEGMENT.getIntensity() >> 3) +2;
+  uint8_t space = (getIntensity() >> 3) +2;
 
   fill(SEGCOLOR(1));
 
@@ -1486,7 +1518,7 @@ uint16_t WS2812FX::mode_multi_comet(void)
   if (SEGENV.step == it) return FRAMETIME;
   if (!SEGENV.allocateData(sizeof(uint16_t) * 8)) return mode_static(); //allocation failed
 
-  fade_out(SEGMENT.getIntensity());
+  fade_out(getIntensity());
 
   uint16_t* comets = reinterpret_cast<uint16_t*>(SEGENV.data);
 
@@ -1579,7 +1611,7 @@ uint16_t WS2812FX::mode_oscillate(void)
   for(uint8_t i = 0; i < numOscillators; i++) {
     // if the counter has increased, move the oscillator by the random step
     if (it != SEGENV.step) oscillators[i].pos += oscillators[i].dir * oscillators[i].speed;
-    oscillators[i].size = SEGLEN/(3+SEGMENT.getIntensity()/8);
+    oscillators[i].size = SEGLEN/(3+getIntensity()/8);
     if((oscillators[i].dir == -1) && (oscillators[i].pos <= 0)) {
       oscillators[i].pos = 0;
       oscillators[i].dir = 1;
@@ -1616,7 +1648,7 @@ uint16_t WS2812FX::mode_lightning(void)
 
   if (SEGENV.step == 0)
   {
-    SEGENV.aux0 = random8(3, 3 + SEGMENT.getIntensity()/20); //number of flashes
+    SEGENV.aux0 = random8(3, 3 + getIntensity()/20); //number of flashes
     bri = 52;
     SEGENV.aux1 = 1;
   }
@@ -1695,7 +1727,7 @@ uint16_t WS2812FX::mode_pride_2015(void)
 
 //eight colored dots, weaving in and out of sync with each other
 uint16_t WS2812FX::mode_juggle(void){
-  fade_out(SEGMENT.getIntensity());
+  fade_out(getIntensity());
   CRGB fastled_col;
   byte dothue = 0;
   for ( byte i = 0; i < 8; i++) {
@@ -1782,7 +1814,7 @@ uint16_t WS2812FX::mode_fire_2012()
     }
 
     // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
-    if (random8() <= SEGMENT.getIntensity()) {
+    if (random8() <= getIntensity()) {
       uint8_t y = random8(7);
       if (y < SEGLEN) heat[y] = qadd8(heat[y], random8(160,255));
     }
@@ -1813,7 +1845,7 @@ uint16_t WS2812FX::mode_colorwaves()
 
   uint16_t hue16 = sHue16;//gHue * 256;
   // uint16_t hueinc16 = beatsin88(113, 300, 1500);
-  uint16_t hueinc16 = beatsin88(113, 60, 300)*SEGMENT.getIntensity()*10/255;  // Use the Intensity Slider for the hues
+  uint16_t hueinc16 = beatsin88(113, 60, 300)*getIntensity()*10/255;  // Use the Intensity Slider for the hues
 
   sPseudotime += duration * msmultiplier;
   sHue16 += duration * beatsin88(400, 5, 9);
@@ -2009,7 +2041,7 @@ uint16_t WS2812FX::mode_colortwinkle()
 
   for (uint16_t j = 0; j <= SEGLEN / 50; j++)
   {
-    if (random8() <= SEGMENT.getIntensity()) {
+    if (random8() <= getIntensity()) {
       for (uint8_t times = 0; times < 5; times++) //attempt to spawn a new pixel 5 times
       {
         int i = random16(SEGLEN);
@@ -2061,7 +2093,7 @@ uint16_t WS2812FX::mode_meteor() {
 
   // fade all leds to colors[1] in LEDs one step
   for (uint16_t i = 0; i < SEGLEN; i++) {
-    if (random8() <= 255 - SEGMENT.getIntensity())
+    if (random8() <= 255 - getIntensity())
     {
       byte meteorTrailDecay = 128 + random8(127);
       trail[i] = scale8(trail[i], meteorTrailDecay);
@@ -2097,7 +2129,7 @@ uint16_t WS2812FX::mode_meteor_smooth() {
 
   // fade all leds to colors[1] in LEDs one step
   for (uint16_t i = 0; i < SEGLEN; i++) {
-    if (trail[i] != 0 && random8() <= 255 - SEGMENT.getIntensity())
+    if (trail[i] != 0 && random8() <= 255 - getIntensity())
     {
       int change = 3 - random8(12); //change each time between -8 and +3
       trail[i] += change;
@@ -2126,7 +2158,7 @@ uint16_t WS2812FX::mode_meteor_smooth() {
 uint16_t WS2812FX::mode_railway()
 {
   uint16_t dur = 40 + (255 - SEGMENT.speed) * 10;
-  uint16_t rampdur = (dur * SEGMENT.getIntensity()) >> 8;
+  uint16_t rampdur = (dur * getIntensity()) >> 8;
   if (SEGENV.step > dur)
   {
     //reverse direction
@@ -2225,7 +2257,7 @@ uint16_t WS2812FX::ripple_base(bool rainbow)
       ripples[i].state = (ripplestate > 254) ? 0 : ripplestate;
     } else //randomly create new wave
     {
-      if (random16(IBN + 10000) <= SEGMENT.getIntensity())
+      if (random16(IBN + 10000) <= getIntensity())
       {
         ripples[i].state = 1;
         ripples[i].pos = random16(SEGLEN);
@@ -2269,7 +2301,7 @@ CRGB WS2812FX::twinklefox_one_twinkle(uint32_t ms, uint8_t salt, bool cat)
   // Overall twinkle density.
   // 0 (NONE lit) to 8 (ALL lit at once).
   // Default is 5.
-  uint8_t twinkleDensity = (SEGMENT.getIntensity() >> 5) +1;
+  uint8_t twinkleDensity = (getIntensity() >> 5) +1;
 
   uint8_t bright = 0;
   if (((slowcycle8 & 0x0E)/2) < twinkleDensity) {
@@ -2430,7 +2462,7 @@ uint16_t WS2812FX::mode_halloween_eyes()
 
     if (state < 2)
     {
-      stateTime = 100 + (255 - SEGMENT.getIntensity())*10; //eye fade time
+      stateTime = 100 + (255 - getIntensity())*10; //eye fade time
     } else {
       uint16_t eyeOffTimeBase = (255 - SEGMENT.speed)*10;
       stateTime = eyeOffTimeBase + random16(eyeOffTimeBase);
@@ -2449,7 +2481,7 @@ uint16_t WS2812FX::mode_halloween_eyes()
 uint16_t WS2812FX::mode_static_pattern()
 {
   uint16_t lit = 1 + SEGMENT.speed;
-  uint16_t unlit = 1 + SEGMENT.getIntensity();
+  uint16_t unlit = 1 + getIntensity();
   bool drawingLit = true;
   uint16_t cnt = 0;
 
@@ -2467,7 +2499,7 @@ uint16_t WS2812FX::mode_static_pattern()
 
 uint16_t WS2812FX::mode_tri_static_pattern()
 {
-  uint8_t segSize = (SEGMENT.getIntensity() >> 5) +1;
+  uint8_t segSize = (getIntensity() >> 5) +1;
   uint8_t currSeg = 0;
   uint16_t currSegCount = 0;
 
@@ -2495,7 +2527,7 @@ uint16_t WS2812FX::spots_base(uint16_t threshold)
   fill(SEGCOLOR(1));
 
   uint16_t maxZones = SEGLEN >> 2;
-  uint16_t zones = 1 + ((SEGMENT.getIntensity() * maxZones) >> 8);
+  uint16_t zones = 1 + ((getIntensity() * maxZones) >> 8);
   uint16_t zoneLen = SEGLEN / zones;
   uint16_t offset = (SEGLEN - zones * zoneLen) >> 1;
 
@@ -2555,7 +2587,7 @@ uint16_t WS2812FX::mode_bouncing_balls(void) {
 
   // number of balls based on intensity setting to max of 7 (cycles colors)
   // non-chosen color is a random color
-  uint8_t numBalls = int(((SEGMENT.getIntensity() * (maxNumBalls - 0.8f)) / 255) + 1);
+  uint8_t numBalls = int(((getIntensity() * (maxNumBalls - 0.8f)) / 255) + 1);
 
   float gravity                           = -9.81; // standard value of gravity
   float impactVelocityStart               = sqrt( -2 * gravity);
@@ -2604,7 +2636,7 @@ uint16_t WS2812FX::mode_bouncing_balls(void) {
 * Sinelon stolen from FASTLED examples
 */
 uint16_t WS2812FX::sinelon_base(bool dual, bool rainbow=false) {
-  fade_out(SEGMENT.getIntensity());
+  fade_out(getIntensity());
   uint16_t pos = beatsin16(SEGMENT.speed/10,0,SEGLEN-1);
   if (SEGENV.call == 0) SEGENV.aux0 = pos;
   uint32_t color1 = color_from_palette(pos, true, false, 0);
@@ -2654,7 +2686,7 @@ uint16_t WS2812FX::mode_glitter()
 {
   mode_palette();
 
-  if (SEGMENT.getIntensity() > random8())
+  if (getIntensity() > random8())
   {
     setPixelColor(random16(SEGLEN), ULTRAWHITE);
   }
@@ -2691,7 +2723,7 @@ uint16_t WS2812FX::mode_popcorn(void) {
   bool hasCol2 = SEGCOLOR(2);
   fill(hasCol2 ? BLACK : SEGCOLOR(1));
 
-  uint8_t numPopcorn = SEGMENT.getIntensity()*maxNumPopcorn/255;
+  uint8_t numPopcorn = getIntensity()*maxNumPopcorn/255;
   if (numPopcorn == 0) numPopcorn = 1;
 
   for(uint8_t i = 0; i < numPopcorn; i++) {
@@ -2706,9 +2738,8 @@ uint16_t WS2812FX::mode_popcorn(void) {
       uint16_t ledIndex = popcorn[i].pos;
       if (ledIndex < SEGLEN) setPixelColor(ledIndex, col);
     } else { // if kernel is inactive, randomly pop it
-      if ((!SEGMENT.getOption(6) && random8() < 2) || 
-      ( SEGMENT.getOption(6) && reactivePeak )) { // POP!!!
-        reactivePeak = false; // reset reactivePeak
+      if ((!IS_REACTIVE && random8() < 2) || 
+      ( getReactivePeak() )) { // POP!!!
         popcorn[i].pos = 0.01f;
 
         uint16_t peakHeight = 128 + random8(128); //0-255
@@ -2745,7 +2776,7 @@ uint16_t WS2812FX::candle(bool multi)
   }
 
   //max. flicker range controlled by intensity
-  uint8_t valrange = SEGMENT.getIntensity();
+  uint8_t valrange = getIntensity();
   uint8_t rndval = valrange >> 1;
 
   //step (how much to move closer to target per frame) coarsely set by speed
@@ -2869,7 +2900,7 @@ uint16_t WS2812FX::mode_starburst(void) {
       stars[j].birth = it;
       stars[j].last = it;
       // more fragments means larger burst effect
-      int num = random8(3,6 + (SEGMENT.getIntensity() >> 5));
+      int num = random8(3,6 + (getIntensity() >> 5));
 
       for (int i=0; i < STARBURST_MAX_FRAG; i++) {
         if (i < num) stars[j].fragment[i] = startPos;
@@ -3048,7 +3079,7 @@ uint16_t WS2812FX::mode_exploding_fireworks(void)
     SEGENV.aux0--;
     if (SEGENV.aux0 < 4) {
       SEGENV.aux0 = 0; //back to flare
-      SEGENV.step = (SEGMENT.getIntensity() > random8()); //decide firing side
+      SEGENV.step = (getIntensity() > random8()); //decide firing side
     }
   }
 
@@ -3073,7 +3104,7 @@ uint16_t WS2812FX::mode_drip(void)
 
   Spark* drops = reinterpret_cast<Spark*>(SEGENV.data);
 
-  numDrops = 1 + (SEGMENT.getIntensity() >> 6);
+  numDrops = 1 + (getIntensity() >> 6);
 
   float gravity = -0.001 - (SEGMENT.speed/50000.0);
   gravity *= SEGLEN;
@@ -3085,7 +3116,7 @@ uint16_t WS2812FX::mode_drip(void)
       drops[j].vel = 0;           // speed
       drops[j].col = sourcedrop;  // brightness
       drops[j].colIndex = 1;      // drop state (0 init, 1 forming, 2 falling, 5 bouncing)
-      reactivePeak = false;      
+      getReactivePeak();      
     }
 
     setPixelColor(SEGLEN-1,color_blend(BLACK,SEGCOLOR(0), sourcedrop));// water source
@@ -3095,9 +3126,8 @@ uint16_t WS2812FX::mode_drip(void)
 
       drops[j].col += map(SEGMENT.speed, 0, 255, 1, 6); // swelling
 
-      if ((!SEGMENT.getOption(6) && random8() < drops[j].col/10) ||               // random drop
-         (SEGMENT.getOption(6) && reactivePeak )) {         // drop on peak
-        reactivePeak = false;
+      if ((!SEGMENT.getOption(SEG_OPTION_REACTIVE) && random8() < drops[j].col/10) ||               // random drop
+         (SEGMENT.getOption(SEG_OPTION_REACTIVE) && getReactivePeak() )) {         // drop on peak
         drops[j].colIndex=2;               //fall
         drops[j].col=255;
       }
@@ -3140,16 +3170,16 @@ uint16_t WS2812FX::mode_drip(void)
 / adapted from https://github.com/atuline/FastLED-Demos/blob/master/plasma/plasma.ino
 */
 uint16_t WS2812FX::mode_plasma(void) {
-  uint8_t thisPhase = beatsin8(6,-64,64);                       // Setting phase change for a couple of waves.
-  uint8_t thatPhase = beatsin8(7,-64,64);
+  // uint8_t thisPhase = beatsin8(6,-64,64);                       // Setting phase change for a couple of waves.
+  // uint8_t thatPhase = beatsin8(7,-64,64);
 
-  for (int i = 0; i < SEGLEN; i++) {   // For each of the LED's in the strand, set color &  brightness based on a wave as follows:
-    uint8_t colorIndex = cubicwave8((i*(1+ 3*(SEGMENT.speed >> 5)))+(thisPhase) & 0xFF)/2   // factor=23 // Create a wave and add a phase change and add another wave with its own phase change.
-                             + cos8((i*(1+ 2*(SEGMENT.speed >> 5)))+(thatPhase) & 0xFF)/2;  // factor=15 // Hey, you can even change the frequencies if you wish.
-    uint8_t thisBright = qsub8(colorIndex, beatsin8(6,0, (255 - SEGMENT.getIntensity())|0x01 ));
-    CRGB color = ColorFromPalette(currentPalette, colorIndex, thisBright, LINEARBLEND);
-    setPixelColor(i, color.red, color.green, color.blue);
-  }
+  // for (int i = 0; i < SEGLEN; i++) {   // For each of the LED's in the strand, set color &  brightness based on a wave as follows:
+  //   uint8_t colorIndex = cubicwave8((i*(1+ 3*(SEGMENT.speed >> 5)))+(thisPhase) & 0xFF)/2   // factor=23 // Create a wave and add a phase change and add another wave with its own phase change.
+  //                            + cos8((i*(1+ 2*(SEGMENT.speed >> 5)))+(thatPhase) & 0xFF)/2;  // factor=15 // Hey, you can even change the frequencies if you wish.
+  //   uint8_t thisBright = qsub8(colorIndex, beatsin8(6,0, (255 - getIntensity())|0x01 ));
+  //   CRGB color = ColorFromPalette(currentPalette, colorIndex, thisBright, LINEARBLEND);
+  //   setPixelColor(i, color.red, color.green, color.blue);
+  // }
 
   return FRAMETIME;
 }
@@ -3160,40 +3190,40 @@ uint16_t WS2812FX::mode_plasma(void) {
  */
 uint16_t WS2812FX::mode_percent(void) {
 
-  uint8_t percent = MAX(0, MIN(200, SEGMENT.getIntensity()));
-  uint16_t active_leds = (percent < 100) ? SEGLEN * percent / 100.0
-                                         : SEGLEN * (200 - percent) / 100.0;
+  // uint8_t percent = MAX(0, MIN(200, getIntensity()));
+  // uint16_t active_leds = (percent < 100) ? SEGLEN * percent / 100.0
+  //                                        : SEGLEN * (200 - percent) / 100.0;
 
-  uint8_t size = (1 + ((SEGMENT.speed * SEGLEN) >> 11));
-  if (SEGMENT.speed == 255) size = 255;
+  // uint8_t size = (1 + ((SEGMENT.speed * SEGLEN) >> 11));
+  // if (SEGMENT.speed == 255) size = 255;
 
-  if (percent < 100) {
-    for (uint16_t i = 0; i < SEGLEN; i++) {
-      if (i < SEGENV.step) {
-        setPixelColor(i, color_from_palette(i, true, PALETTE_SOLID_WRAP, 0));
-      }
-      else {
-        setPixelColor(i, SEGCOLOR(1));
-      }
-    }
-  } else {
-    for (uint16_t i = 0; i < SEGLEN; i++) {
-      if (i < (SEGLEN - SEGENV.step)) {
-        setPixelColor(i, SEGCOLOR(1));
-      }
-      else {
-        setPixelColor(i, color_from_palette(i, true, PALETTE_SOLID_WRAP, 0));
-      }
-    }
-  }
+  // if (percent < 100) {
+  //   for (uint16_t i = 0; i < SEGLEN; i++) {
+  //     if (i < SEGENV.step) {
+  //       setPixelColor(i, color_from_palette(i, true, PALETTE_SOLID_WRAP, 0));
+  //     }
+  //     else {
+  //       setPixelColor(i, SEGCOLOR(1));
+  //     }
+  //   }
+  // } else {
+  //   for (uint16_t i = 0; i < SEGLEN; i++) {
+  //     if (i < (SEGLEN - SEGENV.step)) {
+  //       setPixelColor(i, SEGCOLOR(1));
+  //     }
+  //     else {
+  //       setPixelColor(i, color_from_palette(i, true, PALETTE_SOLID_WRAP, 0));
+  //     }
+  //   }
+  // }
 
-  if(active_leds > SEGENV.step) {  // smooth transition to the target value
-    SEGENV.step += size;
-    if (SEGENV.step > active_leds) SEGENV.step = active_leds;
-  } else if (active_leds < SEGENV.step) {
-    if (SEGENV.step > size) SEGENV.step -= size; else SEGENV.step = 0;
-    if (SEGENV.step < active_leds) SEGENV.step = active_leds;
-  }
+  // if(active_leds > SEGENV.step) {  // smooth transition to the target value
+  //   SEGENV.step += size;
+  //   if (SEGENV.step > active_leds) SEGENV.step = active_leds;
+  // } else if (active_leds < SEGENV.step) {
+  //   if (SEGENV.step > size) SEGENV.step -= size; else SEGENV.step = 0;
+  //   if (SEGENV.step < active_leds) SEGENV.step = active_leds;
+  // }
 
   return FRAMETIME;
 }
@@ -3202,28 +3232,28 @@ uint16_t WS2812FX::mode_percent(void) {
 / Modulates the brightness similar to a heartbeat
 */
 uint16_t WS2812FX::mode_heartbeat(void) {
-  uint8_t bpm = 40 + (SEGMENT.speed >> 4);
-  uint32_t msPerBeat = (60000 / bpm);
-  uint32_t secondBeat = (msPerBeat / 3);
+  // uint8_t bpm = 40 + (SEGMENT.speed >> 4);
+  // uint32_t msPerBeat = (60000 / bpm);
+  // uint32_t secondBeat = (msPerBeat / 3);
 
-  uint32_t bri_lower = SEGENV.aux1;
-  bri_lower = bri_lower * 2042 / (2048 + SEGMENT.getIntensity());
-  SEGENV.aux1 = bri_lower;
+  // uint32_t bri_lower = SEGENV.aux1;
+  // bri_lower = bri_lower * 2042 / (2048 + getIntensity());
+  // SEGENV.aux1 = bri_lower;
 
-  unsigned long beatTimer = millis() - SEGENV.step;
-  if((beatTimer > secondBeat) && !SEGENV.aux0) { // time for the second beat?
-    SEGENV.aux1 = UINT16_MAX; //full bri
-    SEGENV.aux0 = 1;
-  }
-  if(beatTimer > msPerBeat) { // time to reset the beat timer?
-    SEGENV.aux1 = UINT16_MAX; //full bri
-    SEGENV.aux0 = 0;
-    SEGENV.step = millis();
-  }
+  // unsigned long beatTimer = millis() - SEGENV.step;
+  // if((beatTimer > secondBeat) && !SEGENV.aux0) { // time for the second beat?
+  //   SEGENV.aux1 = UINT16_MAX; //full bri
+  //   SEGENV.aux0 = 1;
+  // }
+  // if(beatTimer > msPerBeat) { // time to reset the beat timer?
+  //   SEGENV.aux1 = UINT16_MAX; //full bri
+  //   SEGENV.aux0 = 0;
+  //   SEGENV.step = millis();
+  // }
 
-  for (uint16_t i = 0; i < SEGLEN; i++) {
-    setPixelColor(i, color_blend(color_from_palette(i, true, PALETTE_SOLID_WRAP, 0), SEGCOLOR(1), 255 - (SEGENV.aux1 >> 8)));
-  }
+  // for (uint16_t i = 0; i < SEGLEN; i++) {
+  //   setPixelColor(i, color_blend(color_from_palette(i, true, PALETTE_SOLID_WRAP, 0), SEGCOLOR(1), 255 - (SEGENV.aux1 >> 8)));
+  // }
 
   return FRAMETIME;
 }
@@ -3337,7 +3367,7 @@ CRGB WS2812FX::pacifica_one_layer(uint16_t i, CRGBPalette16& p, uint16_t cistart
   uint16_t waveangle = ioff;
   uint16_t wavescale_half = (wavescale >> 1) + 20;
 
-  waveangle += ((120 + SEGMENT.getIntensity()) * i); //original 250 * i
+  waveangle += ((120 + getIntensity()) * i); //original 250 * i
   uint16_t s16 = sin16(waveangle) + 32768;
   uint16_t cs = scale16(s16, wavescale_half) + wavescale_half;
   ci += (cs * i);
@@ -3351,7 +3381,7 @@ uint16_t WS2812FX::mode_solid_glitter()
 {
   fill(SEGCOLOR(0));
 
-  if (SEGMENT.getIntensity() > random8())
+  if (getIntensity() > random8())
   {
     setPixelColor(random16(SEGLEN), ULTRAWHITE);
   }
@@ -3396,7 +3426,7 @@ uint16_t WS2812FX::mode_sunrise() {
 
     uint16_t wave = triwave16((i * stage) / SEGLEN);
 
-    wave = (wave >> 8) + ((wave * SEGMENT.getIntensity()) >> 15);
+    wave = (wave >> 8) + ((wave * getIntensity()) >> 15);
 
     if (wave > 240) { //clipped, full white sun
       c = color_from_palette( 240, false, true, 255);
@@ -3424,7 +3454,7 @@ uint16_t WS2812FX::mode_flow(void)
   }
 
   uint16_t maxZones = SEGLEN / 6; //only looks good if each zone has at least 6 LEDs
-  uint16_t zones = (SEGMENT.getIntensity() * maxZones) >> 8;
+  uint16_t zones = (getIntensity() * maxZones) >> 8;
   if (zones & 0x01) zones++; //zones must be even
   if (zones < 2) zones = 2;
   uint16_t zoneLen = SEGLEN / zones;
@@ -3457,7 +3487,7 @@ uint16_t WS2812FX::mode_chunchun(void)
   fill(SEGCOLOR(1));
   uint16_t counter = now*(6 + (SEGMENT.speed >> 4));
   uint16_t numBirds = SEGLEN >> 2;
-  uint16_t span = SEGMENT.getIntensity() << 8;
+  uint16_t span = getIntensity() << 8;
 
   for (uint16_t i = 0; i < numBirds; i++)
   {
@@ -3497,7 +3527,7 @@ typedef struct Spotlight {
  */
 uint16_t WS2812FX::mode_dancing_shadows(void)
 {
-  uint8_t numSpotlights = map(SEGMENT.getIntensity(), 0, 255, 2, 50);
+  uint8_t numSpotlights = map(getIntensity(), 0, 255, 2, 50);
   bool initialize = SEGENV.aux0 != numSpotlights;
   SEGENV.aux0 = numSpotlights;
 
@@ -3624,7 +3654,7 @@ uint16_t WS2812FX::mode_washing_machine(void) {
   SEGENV.step += (speed * 128.0f);
 
   for (int i=0; i<SEGLEN; i++) {
-    uint8_t col = sin8(((SEGMENT.getIntensity() / 25 + 1) * 255 * i / SEGLEN) + (SEGENV.step >> 7));
+    uint8_t col = sin8(((getIntensity() / 25 + 1) * 255 * i / SEGLEN) + (SEGENV.step >> 7));
     setPixelColor(i, color_from_palette(col, false, PALETTE_SOLID_WRAP, 3));
   }
 
@@ -3640,7 +3670,7 @@ uint16_t WS2812FX::phased_base(uint8_t moder) {                  // We're making
   uint8_t allfreq = 16;                                          // Base frequency.
   //float* phasePtr = reinterpret_cast<float*>(SEGENV.step);     // Phase change value gets calculated.
   static float phase = 0;//phasePtr[0];
-  uint8_t cutOff = (255-SEGMENT.getIntensity());                      // You can change the number of pixels.  AKA INTENSITY (was 192).
+  uint8_t cutOff = (255-getIntensity());                      // You can change the number of pixels.  AKA INTENSITY (was 192).
   uint8_t modVal = 5;//SEGMENT.fft1/8+1;                         // You can change the modulus. AKA FFT1 (was 5).
 
   uint8_t index = now/64;                                        // Set color rotation speed
@@ -3679,7 +3709,7 @@ uint16_t WS2812FX::mode_twinkleup(void) {                 // A very short twinkl
   for (int i = 0; i<SEGLEN; i++) {
     uint8_t ranstart = random8();                         // The starting value (aka brightness) for each pixel. Must be consistent each time through the loop for this to work.
     uint8_t pixBri = sin8(ranstart + 16 * now/(256-SEGMENT.speed));
-    if (random8() > SEGMENT.getIntensity()) pixBri = 0;
+    if (random8() > getIntensity()) pixBri = 0;
     setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(random8()+millis()/100, false, PALETTE_SOLID_WRAP, 0), pixBri));
   }
 
@@ -3689,7 +3719,7 @@ uint16_t WS2812FX::mode_twinkleup(void) {                 // A very short twinkl
 
 // Peaceful noise that's slow and with gradually changing palettes. Does not support WLED palettes or default colours or controls.
 uint16_t WS2812FX::mode_noisepal(void) {                      // Slow noise palette by Andrew Tuline.
-  uint16_t scale = 15 + (SEGMENT.getIntensity() >> 2);             //default was 30
+  uint16_t scale = 15 + (getIntensity() >> 2);             //default was 30
   //#define scale 30
 
   uint16_t dataSize = sizeof(CRGBPalette16) * 2;              //allocate space for 2 Palettes
@@ -3726,7 +3756,7 @@ uint16_t WS2812FX::mode_noisepal(void) {                      // Slow noise pale
 
 
 // Sine waves that have controllable phase change speed, frequency and cutoff. By Andrew Tuline.
-// SEGMENT.speed ->Speed, SEGMENT.getIntensity() -> Frequency (SEGMENT.fft1 -> Color change, SEGMENT.fft2 -> PWM cutoff)
+// SEGMENT.speed ->Speed, getIntensity() -> Frequency (SEGMENT.fft1 -> Color change, SEGMENT.fft2 -> PWM cutoff)
 //
 uint16_t WS2812FX::mode_sinewave(void) {                  // Adjustable sinewave. By Andrew Tuline
   //#define qsuba(x, b)  ((x>b)?x-b:0)                    // Analog Unsigned subtraction macro. if result <0, then => 0
@@ -3734,10 +3764,10 @@ uint16_t WS2812FX::mode_sinewave(void) {                  // Adjustable sinewave
   uint16_t colorIndex = now /32;//(256 - SEGMENT.fft1);   // Amount of colour change.
 
   SEGENV.step += SEGMENT.speed/16;                        // Speed of animation.
-  uint16_t freq = SEGMENT.getIntensity()/4;//SEGMENT.fft2/8;   // Frequency of the signal.
+  uint16_t freq = getIntensity()/4;//SEGMENT.fft2/8;   // Frequency of the signal.
 
   for (int i=0; i<SEGLEN; i++) {                          // For each of the LED's in the strand, set a brightness based on a wave as follows:
-    int pixBri = cubicwave8((i*freq)+SEGENV.step);//qsuba(cubicwave8((i*freq)+SEGENV.step), (255-SEGMENT.getIntensity())); // qsub sets a minimum value called thiscutoff. If < thiscutoff, then bright = 0. Otherwise, bright = 128 (as defined in qsub)..
+    int pixBri = cubicwave8((i*freq)+SEGENV.step);//qsuba(cubicwave8((i*freq)+SEGENV.step), (255-getIntensity())); // qsub sets a minimum value called thiscutoff. If < thiscutoff, then bright = 0. Otherwise, bright = 128 (as defined in qsub)..
     setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(i*colorIndex/255, false, PALETTE_SOLID_WRAP, 0), pixBri));
   }
 
@@ -3759,7 +3789,7 @@ uint16_t WS2812FX::mode_sinewave(void) {                  // Adjustable sinewave
 uint16_t WS2812FX::mode_perlinmove(void) {
 
   fade_out(255-SEGMENT.fft1);
-  for (int i=0; i<SEGMENT.getIntensity()/16+1; i++) {
+  for (int i=0; i<getIntensity()/16+1; i++) {
     uint16_t locn = inoise16(millis()*128/(260-SEGMENT.speed)+i*15000, millis()*128/(260-SEGMENT.speed));   // Get a new pixel location from moving noise.
     uint16_t pixloc = map(locn,50*256,192*256,0,SEGLEN)%(SEGLEN);                           // Map that to the length of the strand, and ensure we don't go over.
     setPixelColor(pixloc, color_blend(SEGCOLOR(1), color_from_palette(pixloc%255, false, PALETTE_SOLID_WRAP, 0), 255));
@@ -3777,13 +3807,13 @@ uint16_t WS2812FX::mode_perlinmove(void) {
 //////////////////////
 
 uint16_t WS2812FX::mode_pixels(void) {              // Pixels. By Andrew Tuline.
-
+/*
   fade_out(4);
 
-  for (int i=0; i <SEGMENT.getIntensity()/16; i++) {
+  for (int i=0; i <getIntensity()/16; i++) {
     uint16_t segLoc = random(SEGLEN);               // 16 bit for larger strands of LED's.
     setPixelColor(segLoc, color_blend(SEGCOLOR(1), color_from_palette(myVals[i%32]+i*4, false, PALETTE_SOLID_WRAP, 0), sampleAgc));
-  }
+  }*/
 
   return FRAMETIME;
 } // mode_pixels()
@@ -3794,11 +3824,11 @@ uint16_t WS2812FX::mode_pixels(void) {              // Pixels. By Andrew Tuline.
 //////////////////////
 
 uint16_t WS2812FX::mode_pixelwave(void) {                                 // Pixelwave. By Andrew Tuline.
-
+/*
   EVERY_N_MILLISECONDS_I(pixTimer, SEGMENT.speed) {                       // Using FastLED's timer. You want to change speed? You need to . .
 
     pixTimer.setPeriod((256 - SEGMENT.speed) >> 2);                       // change it down here!!! By Andrew Tuline.
-    int pixBri = sample * SEGMENT.getIntensity() / 128;
+    int pixBri = sample * getIntensity() / 128;
     setPixelColor(SEGLEN/2, color_blend(SEGCOLOR(1), color_from_palette(millis(), false, PALETTE_SOLID_WRAP, 0), pixBri));
     for (int i=SEGLEN-1; i>SEGLEN/2; i--) {                               // Move to the right.
       setPixelColor(i,getPixelColor(i-1));
@@ -3808,7 +3838,7 @@ uint16_t WS2812FX::mode_pixelwave(void) {                                 // Pix
       setPixelColor(i,getPixelColor(i+1));
     }
   }
-
+*/
   return FRAMETIME;
 } // mode_pixelwave()
 
@@ -3818,7 +3848,7 @@ uint16_t WS2812FX::mode_pixelwave(void) {                                 // Pix
 //////////////////////
 
 uint16_t WS2812FX::mode_juggles(void) {                                   // Juggles. By Andrew Tuline.
-
+/*
   static int thistime = 20;
 
   EVERY_N_MILLISECONDS_I(pixTimer, SEGMENT.speed) {                       // Using FastLED's timer. You want to change speed? You need to
@@ -3827,11 +3857,11 @@ uint16_t WS2812FX::mode_juggles(void) {                                   // Jug
 
     fade_out(224);
 
-    for (int i=0; i<SEGMENT.getIntensity()/32; i++) {
+    for (int i=0; i<getIntensity()/32; i++) {
       setPixelColor(beatsin16(thistime+i*2,0,SEGLEN-1), color_blend(SEGCOLOR(1), color_from_palette(millis()/4+i*2, false, PALETTE_SOLID_WRAP, 0), sampleAgc));
     }
   }
-
+*/
   return FRAMETIME;
 } // mode_juggles()
 
@@ -3841,16 +3871,16 @@ uint16_t WS2812FX::mode_juggles(void) {                                   // Jug
 //////////////////////
 
 uint16_t WS2812FX::mode_matripix(void) {                                  // Matripix. By Andrew Tuline.
-
+/*
   EVERY_N_MILLISECONDS_I(pixTimer, SEGMENT.speed) {                       // Using FastLED's timer. You want to change speed? You need to . .
 
     pixTimer.setPeriod((256 - SEGMENT.speed) >> 2);                       // change it down here!!!
-    int pixBri = sample * SEGMENT.getIntensity() / 64;
+    int pixBri = sample * getIntensity() / 64;
     setPixelColor(SEGLEN-1, color_blend(SEGCOLOR(1), color_from_palette(millis(), false, PALETTE_SOLID_WRAP, 0), pixBri));
     for (int i=0; i<SEGLEN-1; i++) setPixelColor(i,getPixelColor(i+1));
 
   }
-
+*/
   return FRAMETIME;
 } // mode_matripix()
 
@@ -3861,30 +3891,30 @@ uint16_t WS2812FX::mode_matripix(void) {                                  // Mat
 
 uint16_t WS2812FX::mode_gravimeter(void) {                                // Gravmeter. By Andrew Tuline.
 
-  static int topLED;
-  static int gravityCounter = 0;
+  // static int topLED;
+  // static int gravityCounter = 0;
 
-  fade_out(240);
+  // fade_out(240);
 
-  sampleAvg = sampleAvg * SEGMENT.getIntensity() / 255;
+  // sampleAvg = sampleAvg * getIntensity() / 255;
 
-  int tempsamp = constrain(sampleAvg*2,0,SEGLEN-1);                       // Keep the sample from overflowing.
-  uint8_t gravity = 8 - SEGMENT.speed/32;
+  // int tempsamp = constrain(sampleAvg*2,0,SEGLEN-1);                       // Keep the sample from overflowing.
+  // uint8_t gravity = 8 - SEGMENT.speed/32;
 
-  for (int i=0; i<tempsamp; i++) {
-    uint8_t index = inoise8(i*sampleAvg+millis(), 5000+i*sampleAvg);
-    setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(index, false, PALETTE_SOLID_WRAP, 0), sampleAvg*8));
-  }
+  // for (int i=0; i<tempsamp; i++) {
+  //   uint8_t index = inoise8(i*sampleAvg+millis(), 5000+i*sampleAvg);
+  //   setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(index, false, PALETTE_SOLID_WRAP, 0), sampleAvg*8));
+  // }
 
-  if (tempsamp >= topLED)
-    topLED = tempsamp;
-  else if (gravityCounter % gravity == 0)
-    topLED--;
+  // if (tempsamp >= topLED)
+  //   topLED = tempsamp;
+  // else if (gravityCounter % gravity == 0)
+  //   topLED--;
 
-  if (topLED > 0) {
-    setPixelColor(topLED, color_blend(SEGCOLOR(1), color_from_palette(millis(), false, PALETTE_SOLID_WRAP, 0), 255));
-  }
-  gravityCounter = (gravityCounter + 1) % gravity;
+  // if (topLED > 0) {
+  //   setPixelColor(topLED, color_blend(SEGCOLOR(1), color_from_palette(millis(), false, PALETTE_SOLID_WRAP, 0), 255));
+  // }
+  // gravityCounter = (gravityCounter + 1) % gravity;
 
   return FRAMETIME;
 } // mode_gravimeter()
@@ -3896,23 +3926,23 @@ uint16_t WS2812FX::mode_gravimeter(void) {                                // Gra
 
 uint16_t WS2812FX::mode_plasmoid(void) {                                  // Plasmoid. By Andrew Tuline.
 
-  static int16_t thisphase = 0;                                           // Phase of a cubicwave8.
-  static int16_t thatphase = 0;                                           // Phase of the cos8.
+  // static int16_t thisphase = 0;                                           // Phase of a cubicwave8.
+  // static int16_t thatphase = 0;                                           // Phase of the cos8.
 
-  uint8_t thisbright;
-  uint8_t colorIndex;
+  // uint8_t thisbright;
+  // uint8_t colorIndex;
 
-  thisphase += beatsin8(6,-4,4);                                          // You can change direction and speed individually.
-  thatphase += beatsin8(7,-4,4);                                          // Two phase values to make a complex pattern. By Andrew Tuline.
+  // thisphase += beatsin8(6,-4,4);                                          // You can change direction and speed individually.
+  // thatphase += beatsin8(7,-4,4);                                          // Two phase values to make a complex pattern. By Andrew Tuline.
 
-  for (int i=0; i<SEGLEN; i++) {                                          // For each of the LED's in the strand, set a brightness based on a wave as follows.
-    thisbright = cubicwave8((i*13)+thisphase)/2;
-    thisbright += cos8((i*117)+thatphase)/2;                              // Let's munge the brightness a bit and animate it all with the phases.
-    colorIndex=thisbright;
+  // for (int i=0; i<SEGLEN; i++) {                                          // For each of the LED's in the strand, set a brightness based on a wave as follows.
+  //   thisbright = cubicwave8((i*13)+thisphase)/2;
+  //   thisbright += cos8((i*117)+thatphase)/2;                              // Let's munge the brightness a bit and animate it all with the phases.
+  //   colorIndex=thisbright;
 
-    if (sampleAvg * 8 * SEGMENT.getIntensity()/256 > thisbright) {thisbright = 255;} else {thisbright = 0;}
-    setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(colorIndex, false, PALETTE_SOLID_WRAP, 0), thisbright));
-  }
+  //   if (sampleAvg * 8 * getIntensity()/256 > thisbright) {thisbright = 255;} else {thisbright = 0;}
+  //   setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(colorIndex, false, PALETTE_SOLID_WRAP, 0), thisbright));
+  // }
 
   return FRAMETIME;
 } // mode_plasmoid()
@@ -3924,20 +3954,20 @@ uint16_t WS2812FX::mode_plasmoid(void) {                                  // Pla
 
 uint16_t WS2812FX::mode_puddles(void) {                                   // Puddles. By Andrew Tuline.
 
-  uint16_t size = 0;
-  uint8_t fadeVal = map(SEGMENT.speed,0,255, 224, 255);
-  uint16_t pos = random(SEGLEN);                                          // Set a random starting position.
+  // uint16_t size = 0;
+  // uint8_t fadeVal = map(SEGMENT.speed,0,255, 224, 255);
+  // uint16_t pos = random(SEGLEN);                                          // Set a random starting position.
 
-  fade_out(fadeVal);
+  // fade_out(fadeVal);
 
-  if (sample>0 ) {
-    size = sample * SEGMENT.getIntensity() /256 /8 + 1;                        // Determine size of the flash based on the volume.
-    if (pos+size>= SEGLEN) size=SEGLEN-pos;
-  }
+  // if (sample>0 ) {
+  //   size = sample * getIntensity() /256 /8 + 1;                        // Determine size of the flash based on the volume.
+  //   if (pos+size>= SEGLEN) size=SEGLEN-pos;
+  // }
 
-  for(int i=0; i<size; i++) {                                             // Flash the LED's.
-    setPixelColor(pos+i, color_blend(SEGCOLOR(1), color_from_palette(millis(), false, PALETTE_SOLID_WRAP, 0), 255));
-  }
+  // for(int i=0; i<size; i++) {                                             // Flash the LED's.
+  //   setPixelColor(pos+i, color_blend(SEGCOLOR(1), color_from_palette(millis(), false, PALETTE_SOLID_WRAP, 0), 255));
+  // }
 
   return FRAMETIME;
 } // mode_puddles()
@@ -3949,23 +3979,23 @@ uint16_t WS2812FX::mode_puddles(void) {                                   // Pud
 
 uint16_t WS2812FX::mode_midnoise(void) {                                  // Midnoise. By Andrew Tuline.
 
-  static uint16_t xdist;
-  static uint16_t ydist;
+  // static uint16_t xdist;
+  // static uint16_t ydist;
 
-  fade_out(SEGMENT.speed);
+  // fade_out(SEGMENT.speed);
 
-  uint16_t maxLen = sampleAvg * SEGMENT.getIntensity() / 256;                  // Too sensitive.
-  maxLen = maxLen * SEGMENT.getIntensity() / 256;                              // Reduce sensitity/length.
+  // uint16_t maxLen = sampleAvg * getIntensity() / 256;                  // Too sensitive.
+  // maxLen = maxLen * getIntensity() / 256;                              // Reduce sensitity/length.
 
-  if (maxLen >SEGLEN/2) maxLen = SEGLEN/2;
+  // if (maxLen >SEGLEN/2) maxLen = SEGLEN/2;
 
-  for (int i=(SEGLEN/2-maxLen); i<(SEGLEN/2+maxLen); i++) {
-    uint8_t index = inoise8(i*sampleAvg+xdist, ydist+i*sampleAvg);        // Get a value from the noise function. I'm using both x and y axis.
-    setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(index, false, PALETTE_SOLID_WRAP, 0), 255));
-  }
+  // for (int i=(SEGLEN/2-maxLen); i<(SEGLEN/2+maxLen); i++) {
+  //   uint8_t index = inoise8(i*sampleAvg+xdist, ydist+i*sampleAvg);        // Get a value from the noise function. I'm using both x and y axis.
+  //   setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(index, false, PALETTE_SOLID_WRAP, 0), 255));
+  // }
 
-  xdist=xdist+beatsin8(5,0,10);
-  ydist=ydist+beatsin8(4,0,10);
+  // xdist=xdist+beatsin8(5,0,10);
+  // ydist=ydist+beatsin8(4,0,10);
 
   return FRAMETIME;
 } // mode_midnoise()
@@ -3977,24 +4007,24 @@ uint16_t WS2812FX::mode_midnoise(void) {                                  // Mid
 
 uint16_t WS2812FX::mode_noisemeter(void) {                                // Noisemeter. By Andrew Tuline.
 
-  static uint16_t xdist;
-  static uint16_t ydist;
+  // static uint16_t xdist;
+  // static uint16_t ydist;
 
-  fade_out(SEGMENT.speed);
+  // fade_out(SEGMENT.speed);
 
-  int maxLen = sampleAvg;
-  if (sample > sampleAvg) maxLen = sample-sampleAvg;
-  maxLen = maxLen * SEGMENT.getIntensity() / 256;                              // Still a bit too sensitive.
-  maxLen = maxLen * SEGMENT.getIntensity() / 256;                              // Reduce sensitivity/length.
-  if (maxLen >SEGLEN) maxLen = SEGLEN;
+  // int maxLen = sampleAvg;
+  // if (sample > sampleAvg) maxLen = sample-sampleAvg;
+  // maxLen = maxLen * getIntensity() / 256;                              // Still a bit too sensitive.
+  // maxLen = maxLen * getIntensity() / 256;                              // Reduce sensitivity/length.
+  // if (maxLen >SEGLEN) maxLen = SEGLEN;
 
-  for (int i=0; i<maxLen; i++) {                                          // The louder the sound, the wider the soundbar. By Andrew Tuline.
-    uint8_t index = inoise8(i*sampleAvg+xdist, ydist+i*sampleAvg);        // Get a value from the noise function. I'm using both x and y axis.
-    setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(index, false, PALETTE_SOLID_WRAP, 0), 255));
-  }
+  // for (int i=0; i<maxLen; i++) {                                          // The louder the sound, the wider the soundbar. By Andrew Tuline.
+  //   uint8_t index = inoise8(i*sampleAvg+xdist, ydist+i*sampleAvg);        // Get a value from the noise function. I'm using both x and y axis.
+  //   setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(index, false, PALETTE_SOLID_WRAP, 0), 255));
+  // }
 
-  xdist+=beatsin8(5,0,10);
-  ydist+=beatsin8(4,0,10);
+  // xdist+=beatsin8(5,0,10);
+  // ydist+=beatsin8(4,0,10);
 
   return FRAMETIME;
 } // mode_noisemeter()
@@ -4007,23 +4037,23 @@ uint16_t WS2812FX::mode_noisemeter(void) {                                // Noi
 // I am the god of hellfire. . . Volume (only) reactive fire routine. Oh, look how short this is.
 uint16_t WS2812FX::mode_noisefire(void) {     // Noisefire. By Andrew Tuline.
 
-  const uint8_t xscale = 20;                  // How far apart they are
-  const uint8_t yscale = 3;                   // How fast they move
+  // const uint8_t xscale = 20;                  // How far apart they are
+  // const uint8_t yscale = 3;                   // How fast they move
 
-  CRGB color;
-  uint16_t index;                             // Current colour lookup value.
+  // CRGB color;
+  // uint16_t index;                             // Current colour lookup value.
 
-  currentPalette = CRGBPalette16(CHSV(0,255,2), CHSV(0,255,4), CHSV(0,255,8), CHSV(0, 255, 8),    // Fire palette definition. Lower value = darker.
-                                 CHSV(0, 255, 16), CRGB::Red, CRGB::Red, CRGB::Red,
-                                 CRGB::DarkOrange,CRGB::DarkOrange, CRGB::Orange, CRGB::Orange,
-                                 CRGB::Yellow, CRGB::Orange, CRGB::Yellow, CRGB::Yellow);
+  // currentPalette = CRGBPalette16(CHSV(0,255,2), CHSV(0,255,4), CHSV(0,255,8), CHSV(0, 255, 8),    // Fire palette definition. Lower value = darker.
+  //                                CHSV(0, 255, 16), CRGB::Red, CRGB::Red, CRGB::Red,
+  //                                CRGB::DarkOrange,CRGB::DarkOrange, CRGB::Orange, CRGB::Orange,
+  //                                CRGB::Yellow, CRGB::Orange, CRGB::Yellow, CRGB::Yellow);
 
-  for (int i = 0; i < SEGLEN; i++) {
-    index = inoise8(i*xscale,millis()*yscale*SEGLEN/255);                       // X location is constant, but we move along the Y at the rate of millis(). By Andrew Tuline.
-    index = (255 - i*256/SEGLEN) * index/128;                                   // Now we need to scale index so that it gets blacker as we get close to one of the ends.
-    color = ColorFromPalette(currentPalette, index, sampleAvg*2, LINEARBLEND);  // Use the my own palette.
-    setPixelColor(i, color.red, color.green, color.blue);                       // This is a simple y=mx+b equation that's been scaled. index/128 is another scaling.
-  }
+  // for (int i = 0; i < SEGLEN; i++) {
+  //   index = inoise8(i*xscale,millis()*yscale*SEGLEN/255);                       // X location is constant, but we move along the Y at the rate of millis(). By Andrew Tuline.
+  //   index = (255 - i*256/SEGLEN) * index/128;                                   // Now we need to scale index so that it gets blacker as we get close to one of the ends.
+  //   color = ColorFromPalette(currentPalette, index, sampleAvg*2, LINEARBLEND);  // Use the my own palette.
+  //   setPixelColor(i, color.red, color.green, color.blue);                       // This is a simple y=mx+b equation that's been scaled. index/128 is another scaling.
+  // }
 
   return FRAMETIME;
 } // mode_noisefire()
@@ -4036,22 +4066,21 @@ uint16_t WS2812FX::mode_noisefire(void) {     // Noisefire. By Andrew Tuline.
 // Andrew's crappy peak detector. If I were 40+ years younger, I'd learn signal processing.
 uint16_t WS2812FX::mode_puddlepeak(void) {                                // Puddlepeak. By Andrew Tuline.
 
-  uint16_t size = 0;
-  uint8_t fadeVal = map(SEGMENT.speed,0,255, 224, 255);
-  uint16_t pos = random(SEGLEN);                                          // Set a random starting position.
+  // uint16_t size = 0;
+  // uint8_t fadeVal = map(SEGMENT.speed,0,255, 224, 255);
+  // uint16_t pos = random(SEGLEN);                                          // Set a random starting position.
 
-  fade_out(fadeVal);
+  // fade_out(fadeVal);
 
-  if (reactivePeak ) {
-    size = sampleAgc * SEGMENT.getIntensity() /256 /4 + 1;                        // Determine size of the flash based on the volume.
-    if (pos+size>= SEGLEN) size=SEGLEN-pos;
-    reactivePeak = false;
-  }
+  // if (getReactivePeak() ) {
+  //   size = getPeakIntensity() * getIntensity() /256 /4 + 1;                        // Determine size of the flash based on the volume.
+  //   if (pos+size>= SEGLEN) size=SEGLEN-pos;
+  // }
 
-  for(int i=0; i<size; i++) {                                             // Flash the LED's.
-    setPixelColor(pos+i, color_blend(SEGCOLOR(1), color_from_palette(millis(), false, PALETTE_SOLID_WRAP, 0), 255));
+  // for(int i=0; i<size; i++) {                                             // Flash the LED's.
+  //   setPixelColor(pos+i, color_blend(SEGCOLOR(1), color_from_palette(millis(), false, PALETTE_SOLID_WRAP, 0), 255));
 
-  }
+  // }
 
   return FRAMETIME;
 } // mode_puddlepeak()
@@ -4063,73 +4092,72 @@ uint16_t WS2812FX::mode_puddlepeak(void) {                                // Pud
 
 uint16_t WS2812FX::mode_ripplepeak(void) {                    // * Ripple peak. By Andrew Tuline.
 
-  #ifdef ESP32
-  extern double FFT_MajorPeak;
-//  Serial.println(FFT_MajorPeak);
-  //Serial.println(log10(FFT_MajorPeak)*128-140);
-//  Serial.println(pow(FFT_MajorPeak, .3));
-  #endif
+//   #ifdef ESP32
+//   extern double FFT_MajorPeak;
+// //  Serial.println(FFT_MajorPeak);
+//   //Serial.println(log10(FFT_MajorPeak)*128-140);
+// //  Serial.println(pow(FFT_MajorPeak, .3));
+//   #endif
 
-                                                              // This currently has no controls.
-  #define maxsteps 16                                         // Case statement wouldn't allow a variable.
+//                                                               // This currently has no controls.
+//   #define maxsteps 16                                         // Case statement wouldn't allow a variable.
 
-  uint16_t maxRipples = 32;
-  uint16_t dataSize = sizeof(ripple) * maxRipples;
+//   uint16_t maxRipples = 32;
+//   uint16_t dataSize = sizeof(ripple) * maxRipples;
 
-  if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
+//   if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
 
-  Ripple* ripples = reinterpret_cast<Ripple*>(SEGENV.data);
+//   Ripple* ripples = reinterpret_cast<Ripple*>(SEGENV.data);
 
-//  static uint8_t colour;                                      // Ripple colour is randomized.
-//  static uint16_t centre;                                     // Center of the current ripple.
-//  static int8_t steps = -1;                                   // -1 is the initializing step.
-  static uint8_t ripFade = 255;                               // Starting brightness.
+// //  static uint8_t colour;                                      // Ripple colour is randomized.
+// //  static uint16_t centre;                                     // Center of the current ripple.
+// //  static int8_t steps = -1;                                   // -1 is the initializing step.
+//   static uint8_t ripFade = 255;                               // Starting brightness.
 
-  fade_out(240);                                              // Lower frame rate means less effective fading than FastLED
-  fade_out(240);
+//   fade_out(240);                                              // Lower frame rate means less effective fading than FastLED
+//   fade_out(240);
 
 
-  for (uint16_t i = 0; i < maxRipples; i++) {
+//   for (uint16_t i = 0; i < maxRipples; i++) {
 
-    if (reactivePeak) {
-      reactivePeak = false; 
-      ripples[i].state = -1;
-    }
+//     if (getReactivePeak()) {
+//       ripples[i].state = -1;
+//     }
 
-    switch (ripples[i].state) {
+//     switch (ripples[i].state) {
 
-       case -2:     // Inactive mode
-        break;
+//        case -2:     // Inactive mode
+//         break;
 
-       case -1:                                                  // Initialize ripple variables.
-        ripples[i].pos = random16(SEGLEN);
+//        case -1:                                                  // Initialize ripple variables.
+//         ripples[i].pos = random16(SEGLEN);
 
-        #ifdef ESP32
-          ripples[i].color = (int)(log10(FFT_MajorPeak)*128);
-        #else
-          ripples[i].color = random8();
-        #endif
+//         #ifdef ESP32
+//           ripples[i].color = (int)(log10(FFT_MajorPeak)*128);
+//         #else
+//           ripples[i].color = random8();
+//         #endif
 
-        ripples[i].state = 0;
-        break;
+//         ripples[i].state = 0;
+//         break;
 
-      case 0:
-        setPixelColor(ripples[i].pos, color_blend(SEGCOLOR(1), color_from_palette(ripples[i].color, false, PALETTE_SOLID_WRAP, 0), ripFade));
-        ripples[i].state++;
-        break;
+//       case 0:
+//         setPixelColor(ripples[i].pos, color_blend(SEGCOLOR(1), color_from_palette(ripples[i].color, false, PALETTE_SOLID_WRAP, 0), ripFade));
+//         ripples[i].state++;
+//         break;
 
-      case maxsteps:                                            // At the end of the ripples. -2 is an inactive mode.
-          ripples[i].state = -2;
-        break;
+//       case maxsteps:                                            // At the end of the ripples. -2 is an inactive mode.
+//           ripples[i].state = -2;
+//         break;
 
-      default:                                                  // Middle of the ripples.
+//       default:                                                  // Middle of the ripples.
 
-        setPixelColor((ripples[i].pos + ripples[i].state + SEGLEN) % SEGLEN, color_blend(SEGCOLOR(1), color_from_palette(ripples[i].color, false, PALETTE_SOLID_WRAP, 0), ripFade/ripples[i].state*2));
-        setPixelColor((ripples[i].pos - ripples[i].state + SEGLEN) % SEGLEN, color_blend(SEGCOLOR(1), color_from_palette(ripples[i].color, false, PALETTE_SOLID_WRAP, 0), ripFade/ripples[i].state*2));
-        ripples[i].state++;                                               // Next step.
-        break;
-    } // switch step
-   } // for i
+//         setPixelColor((ripples[i].pos + ripples[i].state + SEGLEN) % SEGLEN, color_blend(SEGCOLOR(1), color_from_palette(ripples[i].color, false, PALETTE_SOLID_WRAP, 0), ripFade/ripples[i].state*2));
+//         setPixelColor((ripples[i].pos - ripples[i].state + SEGLEN) % SEGLEN, color_blend(SEGCOLOR(1), color_from_palette(ripples[i].color, false, PALETTE_SOLID_WRAP, 0), ripFade/ripples[i].state*2));
+//         ripples[i].state++;                                               // Next step.
+//         break;
+//     } // switch step
+//    } // for i
 
 
   return FRAMETIME;
@@ -4141,12 +4169,12 @@ uint16_t WS2812FX::mode_ripplepeak(void) {                    // * Ripple peak. 
 ///////////////////////////////
 
 #ifdef ESP32
-extern double FFT_MajorPeak;
-extern double FFT_Magnitude;
-extern double fftBin[];                     // raw FFT data
-extern double fftResult[];                  // summary of bins array. 16 summary bins.
-extern double beat;
-extern uint16_t lastSample;
+// extern double FFT_MajorPeak;
+// extern double FFT_Magnitude;
+// extern double fftBin[];                     // raw FFT data
+// extern double fftResult[];                  // summary of bins array. 16 summary bins.
+// extern double beat;
+// extern uint16_t lastSample;
 double volume = 1;
 uint32_t ledData[MAX_LEDS];                 // See const.h for a value of 1500.
 uint32_t dataStore[4096];										// we are declaring a storage area or 64 x 64 (4096) words.
@@ -4164,32 +4192,31 @@ double mapf(double x, double in_min, double in_max, double out_min, double out_m
 // Experimenting with volume only as a fallback if no FFT.
 uint16_t WS2812FX::mode_waterfall(void) {                  // Waterfall. By: Andrew Tuline
 
-  static unsigned long prevMillis;
-  unsigned long curMillis = millis();
+//   static unsigned long prevMillis;
+//   unsigned long curMillis = millis();
 
-  if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
-    prevMillis = curMillis;
+//   if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
+//     prevMillis = curMillis;
 
-#ifdef ESP32
-    uint8_t pixCol = (log10((int)FFT_MajorPeak) - 2.26) * 177;       // log10 frequency range is from 2.26 to 3.7. Let's scale accordingly.
-#else
-    uint8_t pixCol = sample * SEGMENT.getIntensity() / 128;
-#endif // ESP8266
+// #ifdef ESP32
+//     uint8_t pixCol = (log10((int)FFT_MajorPeak) - 2.26) * 177;       // log10 frequency range is from 2.26 to 3.7. Let's scale accordingly.
+// #else
+//     uint8_t pixCol = sample * getIntensity() / 128;
+// #endif // ESP8266
 
-    if (reactivePeak) {
-      reactivePeak = false;
-      setPixelColor(SEGLEN-1,92,92,92);
-    } else {
-      #ifdef ESP32
-        setPixelColor(SEGLEN-1, color_blend(SEGCOLOR(1), color_from_palette(pixCol+SEGMENT.getIntensity(), false, PALETTE_SOLID_WRAP, 0), (int)FFT_Magnitude>>8));
+//     if (getReactivePeak()) {
+//       setPixelColor(SEGLEN-1,92,92,92);
+//     } else {
+//       #ifdef ESP32
+//         setPixelColor(SEGLEN-1, color_blend(SEGCOLOR(1), color_from_palette(pixCol+getIntensity(), false, PALETTE_SOLID_WRAP, 0), (int)FFT_Magnitude>>8));
 
-      #else
-        setPixelColor(SEGLEN-1, color_blend(SEGCOLOR(1), color_from_palette(millis(), false, PALETTE_SOLID_WRAP, 0), pixCol));
-      #endif // ESP8266
-    }
+//       #else
+//         setPixelColor(SEGLEN-1, color_blend(SEGCOLOR(1), color_from_palette(millis(), false, PALETTE_SOLID_WRAP, 0), pixCol));
+//       #endif // ESP8266
+//     }
 
-    for (int i=0; i<SEGLEN-1; i++) setPixelColor(i,getPixelColor(i+1));
-  }
+//     for (int i=0; i<SEGLEN-1; i++) setPixelColor(i,getPixelColor(i+1));
+//   }
 
   return FRAMETIME;
 } // mode_waterfall()
@@ -4205,36 +4232,33 @@ uint16_t WS2812FX::mode_waterfall(void) {                  // Waterfall. By: And
 
 uint16_t WS2812FX::mode_binmap(void) {        // Binmap. Scale bins to SEGLEN. By Andrew Tuline.
 
-#ifdef ESP32
+ #ifdef ESP32
+   float factor = NrBands / (float)SEGLEN ;
+   for (int i=0; i<SEGLEN; i++) {
+//     uint16_t startBand = fistBand+i*lastBand/SEGLEN;             // This is the START band for this particular pixel.
+//     uint16_t   endBand = firstBand+(i+1)*lastBand/SEGLEN;         // This is the END band for this particular pixel.
 
-  #define FIRSTBIN 3                          // The first 3 bins are garbage.
-  #define LASTBIN 255                         // Don't use the highest bins, as they're (almost) a mirror of the first 256.
+//     double sumBand = 0;
 
-  float maxVal = 5000;                        // Kind of a guess as to the maximum output value per combined and normalized (but not mapped) bins.
+//     for (int j=startBand; j<=endBand; j++) sumBand += BandEnergy[j];
 
-  for (int i=0; i<SEGLEN; i++) {
+//     sumBand = sumBand/(endBand-startBand+1);                // Normalize it.
+//     sumBand = sumBand * (i+5) / (endBand-startBand+5);      // Disgusting frequency adjustment calculation. Lows were too bright. Am open to quick 'n dirty alternatives.
 
-    uint16_t startBin = FIRSTBIN+i*LASTBIN/SEGLEN;             // This is the START bin for this particular pixel.
-    uint16_t   endBin = FIRSTBIN+(i+1)*LASTBIN/SEGLEN;         // This is the END bin for this particular pixel.
+//     if (sumBin > maxVal) sumBin = maxVal;               // Make sure our bin isn't higher than the max . . which we capped earlier.
 
-    double sumBin = 0;
+//     uint8_t bright = constrain(mapf(sumBin, 0, maxVal, 0, 255),0,255);   // Map the brightness in relation to maxVal and crunch to 8 bits.
+     int idx = (i * factor);
+     int energy = BandEnergy[idx];
+     uint8_t bright = constrain(mapf(energy, 0, 255, 0, 255),0,255);   // Map the brightness in relation to maxVal and crunch to 8 bits.     
 
-    for (int j=startBin; j<=endBin; j++) sumBin += fftBin[j];
+     setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(i*4+160, false, PALETTE_SOLID_WRAP, 0), bright));   // 'i' is just an index in the palette. The FFT value, bright, is the intensity.
+                                                                                                                      // The +160 is 'blue' for the Rainbow palette.
+   } // for i
 
-    sumBin = sumBin/(endBin-startBin+1);                // Normalize it.
-    sumBin = sumBin * (i+5) / (endBin-startBin+5);      // Disgusting frequency adjustment calculation. Lows were too bright. Am open to quick 'n dirty alternatives.
-
-    if (sumBin > maxVal) sumBin = maxVal;               // Make sure our bin isn't higher than the max . . which we capped earlier.
-
-    uint8_t bright = constrain(mapf(sumBin, 0, maxVal, 0, 255),0,255);   // Map the brightness in relation to maxVal and crunch to 8 bits.
-
-    setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(i*4+160, false, PALETTE_SOLID_WRAP, 0), bright));   // 'i' is just an index in the palette. The FFT value, bright, is the intensity.
-                                                                                                                     // The +160 is 'blue' for the Rainbow palette.
-  } // for i
-
-#else
-  fade_out(224);
-#endif // ESP8266
+ #else
+   fade_out(224);
+ #endif // ESP8266
 
   return FRAMETIME;
 } // mode_binmap()
@@ -4262,10 +4286,10 @@ uint16_t WS2812FX::fft_test() {
     }
     Serial.println(" ");
 */
- for(int i = 0; i < 16; i++) {
-    Serial.print(fftResult[i]); Serial.print(" ");
-  }
-    Serial.println(" ");
+//  for(int i = 0; i < 16; i++) {
+//     Serial.print(fftResult[i]); Serial.print(" ");
+//   }
+//     Serial.println(" ");
 
 
 #else
@@ -4283,58 +4307,58 @@ uint16_t WS2812FX::fft_test() {
 uint16_t WS2812FX::mode_freqmatrix(void) {        // Freqmatrix. By Andreas Pleschung.
 
 #ifdef ESP32
-  static unsigned long prevMillis;
-  unsigned long curMillis = millis();
+  // static unsigned long prevMillis;
+  // unsigned long curMillis = millis();
 
-  if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
-    prevMillis = curMillis;
+  // if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
+  //   prevMillis = curMillis;
 
-    uint32_t *leds = ledData;
+  //   uint32_t *leds = ledData;
 
-    double sensitivity = mapf(SEGMENT.fft3, 1, 255, 1, 10);
-    int pixVal = sampleAvg * SEGMENT.getIntensity() / 256 * sensitivity;
-    if (pixVal > 255) pixVal = 255;
+  //   double sensitivity = mapf(SEGMENT.fft3, 1, 255, 1, 10);
+  //   int pixVal = sampleAvg * getIntensity() / 256 * sensitivity;
+  //   if (pixVal > 255) pixVal = 255;
 
-    double intensity = map(pixVal, 0, 255, 0, 100) / 100.0;     // make a brightness from the last avg
+  //   double intensity = map(pixVal, 0, 255, 0, 100) / 100.0;     // make a brightness from the last avg
 
-    CRGB color = 0;
-    CHSV c;
+  //   CRGB color = 0;
+  //   CHSV c;
 
-    if (FFT_MajorPeak > 5120) FFT_MajorPeak = 0;
-      // MajorPeak holds the freq. value which is most abundant in the last sample.
-      // With our sampling rate of 10240Hz we have a usable freq range from roughtly 80Hz to 10240/2 Hz
-      // we will treat everything with less than 65Hz as 0
-      //Serial.printf("%5d ", FFT_MajorPeak, 0);
-    if (FFT_MajorPeak < 80) {
-      color = CRGB::Black;
-    } else {
-      int upperLimit = 20 * SEGMENT.fft2;
-      int lowerLimit = 2 * SEGMENT.fft1;
-      int i =  map(FFT_MajorPeak, lowerLimit, upperLimit, 0, 255);
-      uint16_t b = 255 * intensity;
-      if (b > 255) b=255;
-      c = CHSV(i, 240, (uint8_t)b);
-    }
+  //   if (FFT_MajorPeak > 5120) FFT_MajorPeak = 0;
+  //     // MajorPeak holds the freq. value which is most abundant in the last sample.
+  //     // With our sampling rate of 10240Hz we have a usable freq range from roughtly 80Hz to 10240/2 Hz
+  //     // we will treat everything with less than 65Hz as 0
+  //     //Serial.printf("%5d ", FFT_MajorPeak, 0);
+  //   if (FFT_MajorPeak < 80) {
+  //     color = CRGB::Black;
+  //   } else {
+  //     int upperLimit = 20 * SEGMENT.fft2;
+  //     int lowerLimit = 2 * SEGMENT.fft1;
+  //     int i =  map(FFT_MajorPeak, lowerLimit, upperLimit, 0, 255);
+  //     uint16_t b = 255 * intensity;
+  //     if (b > 255) b=255;
+  //     c = CHSV(i, 240, (uint8_t)b);
+  //   }
 
-    // Serial.println(color);
-    leds[0] =  (c.h << 16) + (c.s << 8)  + (c.v );
+  //   // Serial.println(color);
+  //   leds[0] =  (c.h << 16) + (c.s << 8)  + (c.v );
 
-    // shift the pixels one pixel up
-    for (int i = SEGLEN; i > 0; i--) {                          // Move up
-      leds[i] = leds[i-1];
-    }
+  //   // shift the pixels one pixel up
+  //   for (int i = SEGLEN; i > 0; i--) {                          // Move up
+  //     leds[i] = leds[i-1];
+  //   }
 
-    //fadeval = fade;
+  //   //fadeval = fade;
 
-    // DISPLAY ARRAY
-    for (int i= 0; i < SEGLEN; i++) {
-      c.h = (leds[i] >> 16) & 0xFF;
-      c.s = (leds[i] >> 8) &0xFF;
-      c.v = leds[i] & 0xFF;
-      color = c;                                                // implicit conversion to RGB supplied by FastLED
-      setPixelColor(i, color.red, color.green, color.blue);
-    }
-  }
+  //   // DISPLAY ARRAY
+  //   for (int i= 0; i < SEGLEN; i++) {
+  //     c.h = (leds[i] >> 16) & 0xFF;
+  //     c.s = (leds[i] >> 8) &0xFF;
+  //     c.v = leds[i] & 0xFF;
+  //     color = c;                                                // implicit conversion to RGB supplied by FastLED
+  //     setPixelColor(i, color.red, color.green, color.blue);
+  //   }
+  // }
 
 #else
   fade_out(224);
@@ -4352,11 +4376,11 @@ uint16_t WS2812FX::mode_freqpixel(void) {                                 // Fre
 
 #ifdef ESP32
 
-  uint16_t fadeRate = 2*SEGMENT.speed - SEGMENT.speed*SEGMENT.speed/255;  // Get to 255 as quick as you can.
-  fade_out(fadeRate);
-  uint16_t locn = random16(0,SEGLEN);
-  uint8_t pixCol = (log10((int)FFT_MajorPeak) - 2.26) * 177;              // log10 frequency range is from 2.26 to 3.7. Let's scale accordingly.
-  setPixelColor(locn, color_blend(SEGCOLOR(1), color_from_palette(SEGMENT.getIntensity()+pixCol, false, PALETTE_SOLID_WRAP, 0), (int)FFT_Magnitude>>8));
+//   uint16_t fadeRate = 2*SEGMENT.speed - SEGMENT.speed*SEGMENT.speed/255;  // Get to 255 as quick as you can.
+//   fade_out(fadeRate);
+//   uint16_t locn = random16(0,SEGLEN);
+//   uint8_t pixCol = (log10((int)FFT_MajorPeak) - 2.26) * 177;              // log10 frequency range is from 2.26 to 3.7. Let's scale accordingly.
+//   setPixelColor(locn, color_blend(SEGCOLOR(1), color_from_palette(getIntensity()+pixCol, false, PALETTE_SOLID_WRAP, 0), (int)FFT_Magnitude>>8));
 
 #else
   fade_out(224);
@@ -4385,68 +4409,68 @@ uint16_t WS2812FX::mode_freqpixel(void) {                                 // Fre
 
 uint16_t WS2812FX::mode_freqwave(void) {          // Freqwave. By Andreas Pleschung.
 
-// Instead of using colorpalettes, This effect works on the HSV color circle with red being the lowest frequency
-//
-// As a compromise between speed and accuracy we are currently sampling with 10240Hz, from which we can then determine with a 512bin FFT our max frequency is 5120Hz.
-// Depending on the music stream you have you might find it useful to change the frequency mapping.
+// // Instead of using colorpalettes, This effect works on the HSV color circle with red being the lowest frequency
+// //
+// // As a compromise between speed and accuracy we are currently sampling with 10240Hz, from which we can then determine with a 512bin FFT our max frequency is 5120Hz.
+// // Depending on the music stream you have you might find it useful to change the frequency mapping.
 
   #ifdef ESP32
-  static unsigned long prevMillis;
-  unsigned long curMillis = millis();
+//   static unsigned long prevMillis;
+//   unsigned long curMillis = millis();
 
-  if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
-    prevMillis = curMillis;
+//   if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
+//     prevMillis = curMillis;
 
-    uint32_t* leds = ledData;
+//     uint32_t* leds = ledData;
 
-    //uint8_t fade = SEGMENT.fft3;
-    //uint8_t fadeval;
+//     //uint8_t fade = SEGMENT.fft3;
+//     //uint8_t fadeval;
 
-    double sensitivity = mapf(SEGMENT.fft3, 1, 255, 1, 10);
-    int pixVal = sampleAvg * SEGMENT.getIntensity() / 256 * sensitivity;
-    if (pixVal > 255) pixVal = 255;
+//     double sensitivity = mapf(SEGMENT.fft3, 1, 255, 1, 10);
+//     int pixVal = sampleAvg * getIntensity() / 256 * sensitivity;
+//     if (pixVal > 255) pixVal = 255;
 
-    double intensity = map(pixVal, 0, 255, 0, 100) / 100.0;             // make a brightness from the last avg
+//     double intensity = map(pixVal, 0, 255, 0, 100) / 100.0;             // make a brightness from the last avg
 
-    CRGB color = 0;
-    CHSV c;
+//     CRGB color = 0;
+//     CHSV c;
 
-    if (FFT_MajorPeak > 5120) FFT_MajorPeak = 0;
-      // MajorPeak holds the freq. value which is most abundant in the last sample.
-      // With our sampling rate of 10240Hz we have a usable freq range from roughtly 80Hz to 10240/2 Hz
-      // we will treat everything with less than 65Hz as 0
-      //Serial.printf("%5d ", FFT_MajorPeak, 0);
-    if (FFT_MajorPeak < 80) {
-      color = CRGB::Black;
-    } else {
-      int upperLimit = 20 * SEGMENT.fft2;
-      int lowerLimit = 2 * SEGMENT.fft1;
-      int i =  map(FFT_MajorPeak, lowerLimit, upperLimit, 0, 255);
-      uint16_t b = 255 * intensity;
-      if (b > 255) b=255;
-      c = CHSV(i, 240, (uint8_t)b);
-    }
+//     if (FFT_MajorPeak > 5120) FFT_MajorPeak = 0;
+//       // MajorPeak holds the freq. value which is most abundant in the last sample.
+//       // With our sampling rate of 10240Hz we have a usable freq range from roughtly 80Hz to 10240/2 Hz
+//       // we will treat everything with less than 65Hz as 0
+//       //Serial.printf("%5d ", FFT_MajorPeak, 0);
+//     if (FFT_MajorPeak < 80) {
+//       color = CRGB::Black;
+//     } else {
+//       int upperLimit = 20 * SEGMENT.fft2;
+//       int lowerLimit = 2 * SEGMENT.fft1;
+//       int i =  map(FFT_MajorPeak, lowerLimit, upperLimit, 0, 255);
+//       uint16_t b = 255 * intensity;
+//       if (b > 255) b=255;
+//       c = CHSV(i, 240, (uint8_t)b);
+//     }
 
-    // Serial.println(color);
-    leds[SEGLEN/2] =  (c.h << 16) + (c.s << 8)  + (c.v );
+//     // Serial.println(color);
+//     leds[SEGLEN/2] =  (c.h << 16) + (c.s << 8)  + (c.v );
 
-// shift the pixels one pixel outwards
-    for (int i = SEGLEN; i > SEGLEN/2; i--) {                           // Move to the right.
-      leds[i] = leds[i-1];
-    }
-    for (int i = 0; i < SEGLEN/2; i++) {                                // Move to the left.
-      leds[i] = leds[i+1];
-    }
+// // shift the pixels one pixel outwards
+//     for (int i = SEGLEN; i > SEGLEN/2; i--) {                           // Move to the right.
+//       leds[i] = leds[i-1];
+//     }
+//     for (int i = 0; i < SEGLEN/2; i++) {                                // Move to the left.
+//       leds[i] = leds[i+1];
+//     }
 
-    // DISPLAY ARRAY
-    for (int i= 0; i < SEGLEN; i++) {
-      c.h = (leds[i] >> 16) & 0xFF;
-      c.s = (leds[i] >> 8) &0xFF;
-      c.v = leds[i] & 0xFF;
-      color = c;                                                        // implicit conversion to RGB supplied by FastLED
-      setPixelColor(i, color.red, color.green, color.blue);
-    }
-  }
+//     // DISPLAY ARRAY
+//     for (int i= 0; i < SEGLEN; i++) {
+//       c.h = (leds[i] >> 16) & 0xFF;
+//       c.s = (leds[i] >> 8) &0xFF;
+//       c.v = leds[i] & 0xFF;
+//       color = c;                                                        // implicit conversion to RGB supplied by FastLED
+//       setPixelColor(i, color.red, color.green, color.blue);
+//     }
+//   }
 
 #else
   fade_out(224);
@@ -4463,18 +4487,18 @@ uint16_t WS2812FX::mode_freqwave(void) {          // Freqwave. By Andreas Plesch
 uint16_t WS2812FX::mode_noisemove(void) {     // Noisemove    By: Andrew Tuline
 #ifdef ESP32
 
-  extern double fftResult[];
+//   extern double fftResult[];
 
-  fade_out(SEGMENT.getIntensity());
+//   fade_out(getIntensity());
 
-  for (int i=0; i<6; i++) {                   // DO NOT make this > 5 because we only have 16 FFTresult bins.
-    uint16_t locn = inoise16(millis()*SEGMENT.speed+i*50000, millis()*SEGMENT.speed);   // Get a new pixel location from moving noise.
+//   for (int i=0; i<6; i++) {                   // DO NOT make this > 5 because we only have 16 FFTresult bins.
+//     uint16_t locn = inoise16(millis()*SEGMENT.speed+i*50000, millis()*SEGMENT.speed);   // Get a new pixel location from moving noise.
 
-    locn = map(locn,7500,58000,0,SEGLEN-1);   // Map that to the length of the strand, and ensure we don't go over.
-    locn = locn % (SEGLEN - 1);               // Just to be bloody sure.
+//     locn = map(locn,7500,58000,0,SEGLEN-1);   // Map that to the length of the strand, and ensure we don't go over.
+//     locn = locn % (SEGLEN - 1);               // Just to be bloody sure.
 
-    setPixelColor(locn, color_blend(SEGCOLOR(1), color_from_palette(i*64, false, PALETTE_SOLID_WRAP, 0), fftResult[i*3]*8));
-  }
+//     setPixelColor(locn, color_blend(SEGCOLOR(1), color_from_palette(i*64, false, PALETTE_SOLID_WRAP, 0), fftResult[i*3]*8));
+//   }
 
 #else
   fade_out(224);
@@ -4492,31 +4516,30 @@ uint16_t WS2812FX::mode_noisepeak(void) {     // Noisepeak  Frequency noise beat
 
 #ifdef ESP32
 
-  static CRGBPalette16 thisPalette;
-  static uint16_t dist;
-  CRGB color;
+//   static CRGBPalette16 thisPalette;
+//   static uint16_t dist;
+//   CRGB color;
 
-  uint16_t fadeRate = 2*SEGMENT.speed - SEGMENT.speed*SEGMENT.speed/255;          // Get to 255 as quick as you can.
-  fade_out(fadeRate);
+//   uint16_t fadeRate = 2*SEGMENT.speed - SEGMENT.speed*SEGMENT.speed/255;          // Get to 255 as quick as you can.
+//   fade_out(fadeRate);
 
-  uint8_t pixCol = SEGMENT.getIntensity()+(log10((int)FFT_MajorPeak) - 2.26) * 177;    // log10 frequency range is from 2.26 to 3.7. Let's scale accordingly.
+//   uint8_t pixCol = getIntensity()+(log10((int)FFT_MajorPeak) - 2.26) * 177;    // log10 frequency range is from 2.26 to 3.7. Let's scale accordingly.
 
-   if (reactivePeak) {
-      reactivePeak = false;
+//    if (getReactivePeak()) {
 
-      // Palette defined on the fly that stays close to the base pixCol.
-      thisPalette = CRGBPalette16(CHSV(pixCol,255,random8(128,255)),CHSV(pixCol+32,255,random8(128,255)),CHSV(pixCol+80,192,random8(128,255)),CHSV(pixCol+16,255,random8(128,255)));
+//       // Palette defined on the fly that stays close to the base pixCol.
+//       thisPalette = CRGBPalette16(CHSV(pixCol,255,random8(128,255)),CHSV(pixCol+32,255,random8(128,255)),CHSV(pixCol+80,192,random8(128,255)),CHSV(pixCol+16,255,random8(128,255)));
 
-      for (int i = 0; i < SEGLEN; i++) {
-        uint8_t index = inoise8(i*30, dist+i*30);                                 // Get a value from the noise function. I'm using both x and y axis.
-        color = ColorFromPalette(thisPalette, index, 255, LINEARBLEND);           // Use the my own palette.
-        setPixelColor(i, color.red, color.green, color.blue);
-      }
-    }
-  dist += beatsin8(10,1,4);
+//       for (int i = 0; i < SEGLEN; i++) {
+//         uint8_t index = inoise8(i*30, dist+i*30);                                 // Get a value from the noise function. I'm using both x and y axis.
+//         color = ColorFromPalette(thisPalette, index, 255, LINEARBLEND);           // Use the my own palette.
+//         setPixelColor(i, color.red, color.green, color.blue);
+//       }
+//     }
+//   dist += beatsin8(10,1,4);
 
 #else
-  fade_out(224);
+   fade_out(224);
 #endif // ESP8266
 
   return FRAMETIME;
@@ -4537,50 +4560,50 @@ uint16_t WS2812FX::mode_noisepeak(void) {     // Noisepeak  Frequency noise beat
 uint16_t WS2812FX::mode_spectral(void) {      // Spectral. By Andreas Pleschutznig.
 
 #ifdef ESP32
-  double maxVal = 0;
-  CHSV c;
-  CRGB color;
+//   double maxVal = 0;
+//   CHSV c;
+//   CRGB color;
 
-  if (SEGENV.call == 0)
-    for (int i = 0; i < SEGLEN; i++)
-      setPixelColor(i, 0,0,0);                                      // turn off all leds
+//   if (SEGENV.call == 0)
+//     for (int i = 0; i < SEGLEN; i++)
+//       setPixelColor(i, 0,0,0);                                      // turn off all leds
 
-  // Determine max value in bins to normalize
-  maxVal = 0;
-  for (int i = 0; i < 16; i++) {
-    if (fftResult[i] > maxVal) {
-      maxVal = fftResult[i];
-    }
+//   // Determine max value in bins to normalize
+//   maxVal = 0;
+//   for (int i = 0; i < 16; i++) {
+//     if (fftResult[i] > maxVal) {
+//       maxVal = fftResult[i];
+//     }
 
-  if (maxVal == 0) maxVal = 16;
-  int ledsPerBin = SEGLEN/16;
+//   if (maxVal == 0) maxVal = 16;
+//   int ledsPerBin = SEGLEN/16;
 
-  if (ledsPerBin > 0) {                                             // our led strip is longer or at least than 16 LEDS
-    for (int i = 0; i < 16; i++ )                                   // walk through all bins and display
-      if (ledsPerBin > 1) {                                         // more than one led per bin
-        for (int l = 0; l < ledsPerBin; l++)  {
-          int pos = i*ledsPerBin+l;                                 // which led are we talking about -- Also which bin are we talking about
-          uint8_t angle = map(i*ledsPerBin, 0, SEGLEN, 0, 255);     // the color we are going to display
-          uint8_t bright = mapf(fftResult[i], 0, maxVal, 0, 255);   // find the brightness in relation to max
-          color = CHSV(angle, 240, bright);                         // colculate a color and convert it to RGB
-          setPixelColor(pos, color.red, color.green, color.blue);
-        }
-      } else {                                                      // only one led per bin
-        int pos = i;                                                // which led are we talking about -- Also which bin are we talking about
-        uint8_t angle = map(pos, 0, SEGLEN, 0, 255);                // the color we are going to display
-        uint8_t bright = mapf(fftResult[i], 0, maxVal, 0, 255);     // find the brightness in relation to max
-        color = CHSV(angle, 240, bright);                           // calculate a color and convert it to RGB
-        setPixelColor(pos, color.red, color.green, color.blue);
-      }
-    } else {                                                        // our led strip is shorter than 16LEDS
-    for (int i = 0; i < SEGLEN; i++ )  {                            // which led are we talking about -- Also which bin are we talking about
-        uint8_t angle = map(i, 0, SEGLEN, 0, 255);                  // the color we are going to display
-        uint8_t bright = mapf(fftResult[i], 0, maxVal, 0, 255);     // find the brightness in relation to max
-        color = CHSV(angle, 240, bright);                           // calculate a color and convert it to RGB
-        setPixelColor(i, color.red, color.green, color.blue);
-      }
-    }
-  }
+//   if (ledsPerBin > 0) {                                             // our led strip is longer or at least than 16 LEDS
+//     for (int i = 0; i < 16; i++ )                                   // walk through all bins and display
+//       if (ledsPerBin > 1) {                                         // more than one led per bin
+//         for (int l = 0; l < ledsPerBin; l++)  {
+//           int pos = i*ledsPerBin+l;                                 // which led are we talking about -- Also which bin are we talking about
+//           uint8_t angle = map(i*ledsPerBin, 0, SEGLEN, 0, 255);     // the color we are going to display
+//           uint8_t bright = mapf(fftResult[i], 0, maxVal, 0, 255);   // find the brightness in relation to max
+//           color = CHSV(angle, 240, bright);                         // colculate a color and convert it to RGB
+//           setPixelColor(pos, color.red, color.green, color.blue);
+//         }
+//       } else {                                                      // only one led per bin
+//         int pos = i;                                                // which led are we talking about -- Also which bin are we talking about
+//         uint8_t angle = map(pos, 0, SEGLEN, 0, 255);                // the color we are going to display
+//         uint8_t bright = mapf(fftResult[i], 0, maxVal, 0, 255);     // find the brightness in relation to max
+//         color = CHSV(angle, 240, bright);                           // calculate a color and convert it to RGB
+//         setPixelColor(pos, color.red, color.green, color.blue);
+//       }
+//     } else {                                                        // our led strip is shorter than 16LEDS
+//     for (int i = 0; i < SEGLEN; i++ )  {                            // which led are we talking about -- Also which bin are we talking about
+//         uint8_t angle = map(i, 0, SEGLEN, 0, 255);                  // the color we are going to display
+//         uint8_t bright = mapf(fftResult[i], 0, maxVal, 0, 255);     // find the brightness in relation to max
+//         color = CHSV(angle, 240, bright);                           // calculate a color and convert it to RGB
+//         setPixelColor(i, color.red, color.green, color.blue);
+//       }
+//     }
+//   }
 
 #else
   fade_out(224);
@@ -4626,55 +4649,55 @@ static int scale_2d = 30; // scale is set dynamically once we've started up
 //         it can be used to (slowly) clear the LEDs to black.
 void WS2812FX::blur1d( CRGB* leds, uint16_t numLeds, fract8 blur_amount)
 {
-    uint8_t keep = 255 - blur_amount;
-    uint8_t seep = blur_amount >> 1;
-    CRGB carryover = CRGB::Black;
-    for( uint16_t i = 0; i < numLeds; i++) {
-        CRGB cur = leds[i];
-        CRGB part = cur;
-        part.nscale8( seep);
-        cur.nscale8( keep);
-        cur += carryover;
-        if( i) leds[i-1] += part;
-        leds[i] = cur;
-        carryover = part;
-    }
+    // uint8_t keep = 255 - blur_amount;
+    // uint8_t seep = blur_amount >> 1;
+    // CRGB carryover = CRGB::Black;
+    // for( uint16_t i = 0; i < numLeds; i++) {
+    //     CRGB cur = leds[i];
+    //     CRGB part = cur;
+    //     part.nscale8( seep);
+    //     cur.nscale8( keep);
+    //     cur += carryover;
+    //     if( i) leds[i-1] += part;
+    //     leds[i] = cur;
+    //     carryover = part;
+    // }
 }
 
 void WS2812FX::blur2d( CRGB* leds, uint8_t width, uint8_t height, fract8 blur_amount)
 {
-    blurRows(leds, width, height, blur_amount);
-    blurColumns(leds, width, height, blur_amount);
+    // blurRows(leds, width, height, blur_amount);
+    // blurColumns(leds, width, height, blur_amount);
 }
 
 // blurRows: perform a blur1d on every row of a rectangular matrix
 void WS2812FX::blurRows( CRGB* leds, uint8_t width, uint8_t height, fract8 blur_amount)
 {
-    for( uint8_t row = 0; row < height; row++) {
-        CRGB* rowbase = leds + (row * width);
-        blur1d( rowbase, width, blur_amount);
-    }
+    // for( uint8_t row = 0; row < height; row++) {
+    //     CRGB* rowbase = leds + (row * width);
+    //     blur1d( rowbase, width, blur_amount);
+    // }
 }
 
 // blurColumns: perform a blur1d on each column of a rectangular matrix
 void WS2812FX::blurColumns(CRGB* leds, uint8_t width, uint8_t height, fract8 blur_amount)
 {
-    // blur columns
-    uint8_t keep = 255 - blur_amount;
-    uint8_t seep = blur_amount >> 1;
-    for( uint8_t col = 0; col < width; col++) {
-        CRGB carryover = CRGB::Black;
-        for( uint8_t i = 0; i < height; i++) {
-            CRGB cur = leds[XY(col,i)];
-            CRGB part = cur;
-            part.nscale8( seep);
-            cur.nscale8( keep);
-            cur += carryover;
-            if( i) leds[XY(col,i-1)] += part;
-            leds[XY(col,i)] = cur;
-            carryover = part;
-        }
-    }
+    // // blur columns
+    // uint8_t keep = 255 - blur_amount;
+    // uint8_t seep = blur_amount >> 1;
+    // for( uint8_t col = 0; col < width; col++) {
+    //     CRGB carryover = CRGB::Black;
+    //     for( uint8_t i = 0; i < height; i++) {
+    //         CRGB cur = leds[XY(col,i)];
+    //         CRGB part = cur;
+    //         part.nscale8( seep);
+    //         cur.nscale8( keep);
+    //         cur += carryover;
+    //         if( i) leds[XY(col,i-1)] += part;
+    //         leds[XY(col,i)] = cur;
+    //         carryover = part;
+    //     }
+    // }
 }
 
 // Set 'matrixSerpentine' to false if your pixels are
@@ -4734,24 +4757,24 @@ uint16_t WS2812FX::XY( int x, int y) {
 
 #ifdef ESP32
 
-uint16_t i;
+// uint16_t i;
 
-  if( matrixSerpentine == false) {
-    i = (y * matrixWidth) + x;
-  }
+//   if( matrixSerpentine == false) {
+//     i = (y * matrixWidth) + x;
+//   }
 
-  if( matrixSerpentine == true) {
-    if( y & 0x01) {
-      // Odd rows run backwards
-      uint8_t reverseX = (matrixWidth - 1) - x;
-      i = (y * matrixWidth) + reverseX;
-    } else {
-      // Even rows run forwards
-      i = (y * matrixWidth) + x;
-    }
-  }
+//   if( matrixSerpentine == true) {
+//     if( y & 0x01) {
+//       // Odd rows run backwards
+//       uint8_t reverseX = (matrixWidth - 1) - x;
+//       i = (y * matrixWidth) + reverseX;
+//     } else {
+//       // Even rows run forwards
+//       i = (y * matrixWidth) + x;
+//     }
+//   }
 
-  return i;
+//   return i;
 #endif // ESP8266
 }
 
@@ -4768,93 +4791,93 @@ uint16_t WS2812FX::mode_2Dplasma(void) {      // By Andreas Pleschutznig. A work
 
 #ifdef ESP32
 
-  if (matrixWidth * matrixHeight > SEGLEN) {fade_out(224); return FRAMETIME;}                                 // No, we're not going to overrun the segment.
+//   if (matrixWidth * matrixHeight > SEGLEN) {fade_out(224); return FRAMETIME;}                                 // No, we're not going to overrun the segment.
 
-  static uint8_t ihue=0;
-  uint8_t index;
-  uint8_t bri;
-  static unsigned long prevMillis;
-  unsigned long curMillis = millis();
+//   static uint8_t ihue=0;
+//   uint8_t index;
+//   uint8_t bri;
+//   static unsigned long prevMillis;
+//   unsigned long curMillis = millis();
 
-  if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
-    prevMillis = curMillis;
-    speed2D = SEGMENT.speed;
-    scale_2d = SEGMENT.fft2;
+//   if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
+//     prevMillis = curMillis;
+//     speed2D = SEGMENT.speed;
+//     scale_2d = SEGMENT.fft2;
 
-    uint32_t *noise = ledData;                // we use the set aside storage array for FFT routines to store temporary 2D data
-    uint8_t MAX_DIMENSION = ((matrixWidth>matrixHeight) ? matrixWidth : matrixHeight);
+//     uint32_t *noise = ledData;                // we use the set aside storage array for FFT routines to store temporary 2D data
+//     uint8_t MAX_DIMENSION = ((matrixWidth>matrixHeight) ? matrixWidth : matrixHeight);
 
-    // If we're runing at a low "speed", some 8-bit artifacts become visible
-    // from frame-to-frame.  In order to reduce this, we can do some fast data-smoothing.
-    // The amount of data smoothing we're doing depends on "speed".
+//     // If we're runing at a low "speed", some 8-bit artifacts become visible
+//     // from frame-to-frame.  In order to reduce this, we can do some fast data-smoothing.
+//     // The amount of data smoothing we're doing depends on "speed".
 
-    uint8_t dataSmoothing = 0;
-    if( speed2D < 50) {
-      dataSmoothing = 200 - (speed2D * 4);
-      }
+//     uint8_t dataSmoothing = 0;
+//     if( speed2D < 50) {
+//       dataSmoothing = 200 - (speed2D * 4);
+//       }
 
-    for(int i = 0; i < MAX_DIMENSION; i++) {
-      int ioffset = scale_2d * i;
-      for(int j = 0; j < MAX_DIMENSION; j++) {
-        int joffset = scale_2d * j;
+//     for(int i = 0; i < MAX_DIMENSION; i++) {
+//       int ioffset = scale_2d * i;
+//       for(int j = 0; j < MAX_DIMENSION; j++) {
+//         int joffset = scale_2d * j;
 
-        uint8_t data = inoise8(x + ioffset,y + joffset,z);
+//         uint8_t data = inoise8(x + ioffset,y + joffset,z);
 
-          // The range of the inoise8 function is roughly 16-238.
-          // These two operations expand those values out to roughly 0..255
-          // You can comment them out if you want the raw noise data.
-        data = qsub8(data,16);
-        data = qadd8(data,scale8(data,39));
+//           // The range of the inoise8 function is roughly 16-238.
+//           // These two operations expand those values out to roughly 0..255
+//           // You can comment them out if you want the raw noise data.
+//         data = qsub8(data,16);
+//         data = qadd8(data,scale8(data,39));
 
-        if( dataSmoothing ) {
-          uint8_t olddata = noise[i * matrixWidth + j];
-          uint8_t newdata = scale8( olddata, dataSmoothing) + scale8( data, 256 - dataSmoothing);
-          data = newdata;
-        }
+//         if( dataSmoothing ) {
+//           uint8_t olddata = noise[i * matrixWidth + j];
+//           uint8_t newdata = scale8( olddata, dataSmoothing) + scale8( data, 256 - dataSmoothing);
+//           data = newdata;
+//         }
 
-        noise[i * matrixWidth + j] = data;
-      }
-    }
+//         noise[i * matrixWidth + j] = data;
+//       }
+//     }
 
-    z += speed2D;
+//     z += speed2D;
 
-    // apply slow drift to X and Y, just for visual variation.
-    x += speed2D / 8;
-    y -= speed2D / 16;
+//     // apply slow drift to X and Y, just for visual variation.
+//     x += speed2D / 8;
+//     y -= speed2D / 16;
 
- // ---
+//  // ---
 
-  for(int i = 0; i < matrixWidth; i++) {
-    for(int j = 0; j < matrixHeight; j++) {
-      // We use the value at the (i,j) coordinate in the noise
-      // array for our brightness, and the flipped value from (j,i)
-      // for our pixel's index into the color palette.
+//   for(int i = 0; i < matrixWidth; i++) {
+//     for(int j = 0; j < matrixHeight; j++) {
+//       // We use the value at the (i,j) coordinate in the noise
+//       // array for our brightness, and the flipped value from (j,i)
+//       // for our pixel's index into the color palette.
 
-      uint8_t index = noise[j * matrixWidth + i];
-      uint8_t bri =   noise[i * matrixWidth + j];
+//       uint8_t index = noise[j * matrixWidth + i];
+//       uint8_t bri =   noise[i * matrixWidth + j];
 
-      // if this palette is a 'loop', add a slowly-changing base value
-      if (SEGMENT.fft1 > 128) {
-        index += ihue;
-      }
+//       // if this palette is a 'loop', add a slowly-changing base value
+//       if (SEGMENT.fft1 > 128) {
+//         index += ihue;
+//       }
 
-      // brighten up, as the color palette itself often contains the
-      // light/dark dynamic range desired
-      if( bri > 127 ) {
-        bri = 255;
-      } else {
-        bri = dim8_raw( bri * 2);
-      }
+//       // brighten up, as the color palette itself often contains the
+//       // light/dark dynamic range desired
+//       if( bri > 127 ) {
+//         bri = 255;
+//       } else {
+//         bri = dim8_raw( bri * 2);
+//       }
 
-      CRGB color = ColorFromPalette( currentPalette, index, bri);
-      setPixelColor(XY(i, j), color.red, color.green, color.blue);
-      }
-    }
-  ihue+=1;
-  }
+//       CRGB color = ColorFromPalette( currentPalette, index, bri);
+//       setPixelColor(XY(i, j), color.red, color.green, color.blue);
+//       }
+//     }
+//   ihue+=1;
+//   }
 
 #else
-  fade_out(224);
+   fade_out(224);
 #endif // ESP8266
 
   return FRAMETIME;
@@ -4869,35 +4892,35 @@ uint16_t WS2812FX::mode_2Dfirenoise(void) {   // firenoise2d. By Andrew Tuline. 
 
 #ifdef ESP32
 
-  if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}                 // No, we're not going to overrun the segment.
+//   if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}                 // No, we're not going to overrun the segment.
 
-  CRGB *leds = (CRGB *)ledData;
+//   CRGB *leds = (CRGB *)ledData;
 
-  uint32_t xscale = 600;                                          // How far apart they are
-  uint32_t yscale = 1000;                                         // How fast they move
-  uint8_t indexx = 0;
+//   uint32_t xscale = 600;                                          // How far apart they are
+//   uint32_t yscale = 1000;                                         // How fast they move
+//   uint8_t indexx = 0;
 
-  currentPalette = CRGBPalette16(  CHSV(0,255,2), CHSV(0,255,4), CHSV(0,255,8), CHSV(0, 255, 8),
-                                   CHSV(0, 255, 16), CRGB::Red, CRGB::Red, CRGB::Red,
-                                   CRGB::DarkOrange,CRGB::DarkOrange, CRGB::Orange, CRGB::Orange,
-                                   CRGB::Yellow, CRGB::Orange, CRGB::Yellow, CRGB::Yellow);
-  int a = millis();
-  for (int j=0; j < matrixWidth; j++) {
-    for (int i=0; i < matrixHeight; i++) {
+//   currentPalette = CRGBPalette16(  CHSV(0,255,2), CHSV(0,255,4), CHSV(0,255,8), CHSV(0, 255, 8),
+//                                    CHSV(0, 255, 16), CRGB::Red, CRGB::Red, CRGB::Red,
+//                                    CRGB::DarkOrange,CRGB::DarkOrange, CRGB::Orange, CRGB::Orange,
+//                                    CRGB::Yellow, CRGB::Orange, CRGB::Yellow, CRGB::Yellow);
+//   int a = millis();
+//   for (int j=0; j < matrixWidth; j++) {
+//     for (int i=0; i < matrixHeight; i++) {
 
-      // This perlin fire is by Andrew Tuline
-      indexx = inoise8(i*xscale+millis()/4,j*yscale*matrixWidth/255);                                             // We're moving along our Perlin map.
-      leds[XY(i,j)] = ColorFromPalette(currentPalette, min(i*(indexx)>>4, 255), i*255/matrixWidth, LINEARBLEND);  // With that value, look up the 8 bit colour palette value and assign it to the current LED.
+//       // This perlin fire is by Andrew Tuline
+//       indexx = inoise8(i*xscale+millis()/4,j*yscale*matrixWidth/255);                                             // We're moving along our Perlin map.
+//       leds[XY(i,j)] = ColorFromPalette(currentPalette, min(i*(indexx)>>4, 255), i*255/matrixWidth, LINEARBLEND);  // With that value, look up the 8 bit colour palette value and assign it to the current LED.
 
-// This perlin fire is my /u/ldirko
-//      leds[XY(i,j)] = ColorFromPalette (currentPalette, qsub8(inoise8 (i * 60 , j * 60+ a , a /3), abs8(j - (matrixHeight-1)) * 255 / (matrixHeight-1)), 255);
+// // This perlin fire is my /u/ldirko
+// //      leds[XY(i,j)] = ColorFromPalette (currentPalette, qsub8(inoise8 (i * 60 , j * 60+ a , a /3), abs8(j - (matrixHeight-1)) * 255 / (matrixHeight-1)), 255);
 
-    } // for i
-  } // for j
+//     } // for i
+//   } // for j
 
-  for (int i=0; i<SEGLEN; i++) {
-    setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
-  }
+//   for (int i=0; i<SEGLEN; i++) {
+//     setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
+//   }
 
 #else
   fade_out(224);
@@ -4916,33 +4939,33 @@ uint16_t WS2812FX::mode_2Dsquaredswirl(void) {  // By: Mark Kriegsman. https://g
                                                 // fft3 affects the blur amount.
 #ifdef ESP32
 
-  if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}    // No, we're not going to overrun the segment.
+//   if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}    // No, we're not going to overrun the segment.
 
-  CRGB *leds = (CRGB *)ledData;
-  const uint8_t kBorderWidth = 2;
+//   CRGB *leds = (CRGB *)ledData;
+//   const uint8_t kBorderWidth = 2;
 
-  fadeToBlackBy(leds, SEGLEN, 24);
-  // uint8_t blurAmount = dim8_raw( beatsin8(20,64,128) );  //3,64,192
-  uint8_t blurAmount = SEGMENT.fft3;
-  blur2d(leds, matrixWidth, matrixHeight, blurAmount);
+//   fadeToBlackBy(leds, SEGLEN, 24);
+//   // uint8_t blurAmount = dim8_raw( beatsin8(20,64,128) );  //3,64,192
+//   uint8_t blurAmount = SEGMENT.fft3;
+//   blur2d(leds, matrixWidth, matrixHeight, blurAmount);
 
-  // Use two out-of-sync sine waves
-  uint8_t  i = beatsin8(19, kBorderWidth, matrixWidth-kBorderWidth);
-  uint8_t  j = beatsin8(22, kBorderWidth, matrixWidth-kBorderWidth);
-  uint8_t  k = beatsin8(17, kBorderWidth, matrixWidth-kBorderWidth);
-  uint8_t  m = beatsin8(18, kBorderWidth, matrixHeight-kBorderWidth);
-  uint8_t  n = beatsin8(15, kBorderWidth, matrixHeight-kBorderWidth);
-  uint8_t  p = beatsin8(20, kBorderWidth, matrixHeight-kBorderWidth);
+//   // Use two out-of-sync sine waves
+//   uint8_t  i = beatsin8(19, kBorderWidth, matrixWidth-kBorderWidth);
+//   uint8_t  j = beatsin8(22, kBorderWidth, matrixWidth-kBorderWidth);
+//   uint8_t  k = beatsin8(17, kBorderWidth, matrixWidth-kBorderWidth);
+//   uint8_t  m = beatsin8(18, kBorderWidth, matrixHeight-kBorderWidth);
+//   uint8_t  n = beatsin8(15, kBorderWidth, matrixHeight-kBorderWidth);
+//   uint8_t  p = beatsin8(20, kBorderWidth, matrixHeight-kBorderWidth);
 
-  uint16_t ms = millis();
+//   uint16_t ms = millis();
 
-  leds[XY( i, m)] += ColorFromPalette(currentPalette, ms/29, 255, LINEARBLEND);
-  leds[XY( j, n)] += ColorFromPalette(currentPalette, ms/41, 255, LINEARBLEND);
-  leds[XY( k, p)] += ColorFromPalette(currentPalette, ms/73, 255, LINEARBLEND);
+//   leds[XY( i, m)] += ColorFromPalette(currentPalette, ms/29, 255, LINEARBLEND);
+//   leds[XY( j, n)] += ColorFromPalette(currentPalette, ms/41, 255, LINEARBLEND);
+//   leds[XY( k, p)] += ColorFromPalette(currentPalette, ms/73, 255, LINEARBLEND);
 
-  for (int i=0; i<SEGLEN; i++) {
-    setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
-  }
+//   for (int i=0; i<SEGLEN; i++) {
+//     setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
+//   }
 
 #else
   fade_out(224);
@@ -4959,53 +4982,53 @@ uint16_t WS2812FX::mode_2Dsquaredswirl(void) {  // By: Mark Kriegsman. https://g
 uint16_t WS2812FX::mode_2Dfire2012(void) {    // Fire2012 by Mark Kriegsman. Converted to WLED by Andrew Tuline.
 #ifdef ESP32
 
-  if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}    // No, we're not going to overrun the segment.
+//   if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}    // No, we're not going to overrun the segment.
 
-  CRGB *leds = (CRGB *)ledData;
-  static byte *heat = (byte *)dataStore;
+//   CRGB *leds = (CRGB *)ledData;
+//   static byte *heat = (byte *)dataStore;
 
-  const uint8_t COOLING = 50;
-  const uint8_t SPARKING = 50;
+//   const uint8_t COOLING = 50;
+//   const uint8_t SPARKING = 50;
 
-  CRGBPalette16 currentPalette  = CRGBPalette16( CRGB::Black, CRGB::Red, CRGB::Orange, CRGB::Yellow);
+//   CRGBPalette16 currentPalette  = CRGBPalette16( CRGB::Black, CRGB::Red, CRGB::Orange, CRGB::Yellow);
 
-  static unsigned long prevMillis;
-  unsigned long curMillis = millis();
+//   static unsigned long prevMillis;
+//   unsigned long curMillis = millis();
 
-  if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
-    prevMillis = curMillis;
-    static byte *heat = (byte *)dataStore;
+//   if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
+//     prevMillis = curMillis;
+//     static byte *heat = (byte *)dataStore;
 
-    for (int mw = 0; mw < matrixWidth; mw++) {  // Move along the width of the flame
+//     for (int mw = 0; mw < matrixWidth; mw++) {  // Move along the width of the flame
 
-      // Step 1.  Cool down every cell a little
-      for (int mh = 0; mh < matrixHeight; mh++) {
-        heat[mw*matrixWidth+mh] = qsub8( heat[mw*matrixWidth+mh],  random16(0, ((COOLING * 10) / matrixHeight) + 2));
-      }
+//       // Step 1.  Cool down every cell a little
+//       for (int mh = 0; mh < matrixHeight; mh++) {
+//         heat[mw*matrixWidth+mh] = qsub8( heat[mw*matrixWidth+mh],  random16(0, ((COOLING * 10) / matrixHeight) + 2));
+//       }
 
-      // Step 2.  Heat from each cell drifts 'up' and diffuses a little
-      for (int mh = matrixHeight - 1; mh >= 2; mh--) {
-        heat[mw*matrixWidth+mh] = (heat[mw*matrixWidth+mh - 1] + heat[mw*matrixWidth+mh - 2] + heat[mw*matrixWidth+mh - 2] ) / 3;
-      }
+//       // Step 2.  Heat from each cell drifts 'up' and diffuses a little
+//       for (int mh = matrixHeight - 1; mh >= 2; mh--) {
+//         heat[mw*matrixWidth+mh] = (heat[mw*matrixWidth+mh - 1] + heat[mw*matrixWidth+mh - 2] + heat[mw*matrixWidth+mh - 2] ) / 3;
+//       }
 
-      // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
-      if (random8(0,255) < SPARKING ) {
-        int mh = random8(3);
-        heat[mw*matrixWidth+mh] = qadd8( heat[mw*matrixWidth+mh], random8(160,255) );
-      }
+//       // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
+//       if (random8(0,255) < SPARKING ) {
+//         int mh = random8(3);
+//         heat[mw*matrixWidth+mh] = qadd8( heat[mw*matrixWidth+mh], random8(160,255) );
+//       }
 
-      // Step 4.  Map from heat cells to LED colors
-      for (int mh = 0; mh < matrixHeight; mh++) {
-        byte colorindex = scale8( heat[mw*matrixWidth+mh], 240);
-        leds[XY(mw,mh)] = ColorFromPalette(currentPalette, colorindex, 255);
-      } // for mh
-    } // for mw
+//       // Step 4.  Map from heat cells to LED colors
+//       for (int mh = 0; mh < matrixHeight; mh++) {
+//         byte colorindex = scale8( heat[mw*matrixWidth+mh], 240);
+//         leds[XY(mw,mh)] = ColorFromPalette(currentPalette, colorindex, 255);
+//       } // for mh
+//     } // for mw
 
-    for (int i=0; i<SEGLEN; i++) {
-      setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
-    }
+//     for (int i=0; i<SEGLEN; i++) {
+//       setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
+//     }
 
-  } // if millis
+//   } // if millis
 
 #else
   fade_out(224);
@@ -5022,30 +5045,30 @@ uint16_t WS2812FX::mode_2Dfire2012(void) {    // Fire2012 by Mark Kriegsman. Con
 uint16_t WS2812FX::mode_2Ddna(void) {         // dna originally by by ldirko at https://pastebin.com/pCkkkzcs. Updated by Preyy. WLED version by Andrew Tuline.
 #ifdef ESP32
 
-  if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}    // No, we're not going to overrun the segment.
+//   if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}    // No, we're not going to overrun the segment.
 
-  CRGB *leds = (CRGB *)ledData;
+//   CRGB *leds = (CRGB *)ledData;
 
-  fadeToBlackBy(leds, SEGLEN, 64);
+//   fadeToBlackBy(leds, SEGLEN, 64);
 
-  static unsigned long prevMillis;
-  unsigned long curMillis = millis();
+//   static unsigned long prevMillis;
+//   unsigned long curMillis = millis();
 
-  if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>3)) {
-    prevMillis = curMillis;
+//   if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>3)) {
+//     prevMillis = curMillis;
 
-  for(int i = 0; i < matrixHeight; i++) {
-      leds[XY(beatsin8(10, 0, matrixWidth-1, 0, i*4), i)] = ColorFromPalette(currentPalette, i*5+millis()/17, beatsin8(5, 55, 255, 0, i*10), LINEARBLEND);
-      leds[XY(beatsin8(10, 0, matrixWidth-1, 0, i*4+128), i)] = ColorFromPalette(currentPalette,i*5+128+millis()/17, beatsin8(5, 55, 255, 0, i*10+128), LINEARBLEND);        // 180 degrees (128) out of phase
-  }
+//   for(int i = 0; i < matrixHeight; i++) {
+//       leds[XY(beatsin8(10, 0, matrixWidth-1, 0, i*4), i)] = ColorFromPalette(currentPalette, i*5+millis()/17, beatsin8(5, 55, 255, 0, i*10), LINEARBLEND);
+//       leds[XY(beatsin8(10, 0, matrixWidth-1, 0, i*4+128), i)] = ColorFromPalette(currentPalette,i*5+128+millis()/17, beatsin8(5, 55, 255, 0, i*10+128), LINEARBLEND);        // 180 degrees (128) out of phase
+//   }
 
-  blur2d(leds, matrixWidth, matrixHeight, 2);
+//   blur2d(leds, matrixWidth, matrixHeight, 2);
 
-   for (int i=0; i<SEGLEN; i++) {
-      setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
-   }
+//    for (int i=0; i<SEGLEN; i++) {
+//       setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
+//    }
 
-  } // if millis
+//   } // if millis
 
 #else
   fade_out(224);
@@ -5062,69 +5085,69 @@ uint16_t WS2812FX::mode_2Ddna(void) {         // dna originally by by ldirko at 
 uint16_t WS2812FX::mode_2Dmatrix(void) {      // Matrix2D. By Jeremy Williams. Adapted by Andrew Tuline.
 #ifdef ESP32
 
-  if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}    // No, we're not going to overrun the segment.
+//   if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}    // No, we're not going to overrun the segment.
 
-  CRGB *leds = (CRGB* )ledData;
+//   CRGB *leds = (CRGB* )ledData;
 
-  static unsigned long prevMillis;
-  unsigned long curMillis = millis();
+//   static unsigned long prevMillis;
+//   unsigned long curMillis = millis();
 
-  if (SEGENV.call == 0) fill_solid(leds,SEGLEN, 0);
+//   if (SEGENV.call == 0) fill_solid(leds,SEGLEN, 0);
 
-  if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
-    prevMillis = curMillis;
+//   if ((curMillis - prevMillis) >= ((256-SEGMENT.speed) >>2)) {
+//     prevMillis = curMillis;
 
-    if (SEGMENT.fft3 < 128) {									      // check for orientation, slider in first quarter, default orientation
-    	for (int16_t row=matrixHeight-1; row>=0; row--) {
-    		for (int16_t col=0; col<matrixWidth; col++) {
-    			if (leds[XY(col, row)] == CRGB(175,255,175)) {
-    				leds[XY(col, row)] = CRGB(27,130,39);   // create trail
-    				if (row < matrixHeight-1) leds[XY(col, row+1)] = CRGB(175,255,175);
-    			}
-    		}
-    	}
-    } else if (SEGMENT.fft3 >= 128)   {	            // second quadrant
-    	for (int16_t row=matrixHeight-1; row>=0; row--) {
-    	    		for (int16_t col=matrixWidth-1; col >= 0; col--) {
-    	    			if (leds[XY(col, row)] == CRGB(175,255,175)) {
-    	    				leds[XY(col, row)] = CRGB(27,130,39);   // create trail
-    	    				if (row < matrixHeight-1) leds[XY(col+1, row)] = CRGB(175,255,175);
-    	    			}
-    	    		}
-    	    	}
-      }
-    // fade all leds
-    for(int i = 0; i < SEGLEN; i++) {
-      if (leds[i].g != 255) leds[i].nscale8(192);   // only fade trail
-    }
+//     if (SEGMENT.fft3 < 128) {									      // check for orientation, slider in first quarter, default orientation
+//     	for (int16_t row=matrixHeight-1; row>=0; row--) {
+//     		for (int16_t col=0; col<matrixWidth; col++) {
+//     			if (leds[XY(col, row)] == CRGB(175,255,175)) {
+//     				leds[XY(col, row)] = CRGB(27,130,39);   // create trail
+//     				if (row < matrixHeight-1) leds[XY(col, row+1)] = CRGB(175,255,175);
+//     			}
+//     		}
+//     	}
+//     } else if (SEGMENT.fft3 >= 128)   {	            // second quadrant
+//     	for (int16_t row=matrixHeight-1; row>=0; row--) {
+//     	    		for (int16_t col=matrixWidth-1; col >= 0; col--) {
+//     	    			if (leds[XY(col, row)] == CRGB(175,255,175)) {
+//     	    				leds[XY(col, row)] = CRGB(27,130,39);   // create trail
+//     	    				if (row < matrixHeight-1) leds[XY(col+1, row)] = CRGB(175,255,175);
+//     	    			}
+//     	    		}
+//     	    	}
+//       }
+//     // fade all leds
+//     for(int i = 0; i < SEGLEN; i++) {
+//       if (leds[i].g != 255) leds[i].nscale8(192);   // only fade trail
+//     }
 
-    // check for empty screen to ensure code spawn
-    bool emptyScreen = true;
-    for(int i = 0; i < SEGLEN; i++) {
-      if (leds[i])
-      {
-        emptyScreen = false;
-        break;
-      }
-    }
+//     // check for empty screen to ensure code spawn
+//     bool emptyScreen = true;
+//     for(int i = 0; i < SEGLEN; i++) {
+//       if (leds[i])
+//       {
+//         emptyScreen = false;
+//         break;
+//       }
+//     }
 
-    // spawn new falling code
-    if (SEGMENT.fft3 < 128) {
-    	if (random8(3) == 0 || emptyScreen) {         // lower number == more frequent spawns
-    	  uint8_t spawnX = random8(matrixWidth);
-      	  leds[XY(spawnX, 0)] = CRGB(175,255,175 );
-    	}
-    } else if (SEGMENT.fft3 >= 128) {
-    	if (random8(3) == 0 || emptyScreen) {         // lower number == more frequent spawns
-    	  uint8_t spawnX = random8(matrixHeight);
-    	  leds[XY(0, spawnX)] = CRGB(175,255,175 );
-    	  }
-    }
+//     // spawn new falling code
+//     if (SEGMENT.fft3 < 128) {
+//     	if (random8(3) == 0 || emptyScreen) {         // lower number == more frequent spawns
+//     	  uint8_t spawnX = random8(matrixWidth);
+//       	  leds[XY(spawnX, 0)] = CRGB(175,255,175 );
+//     	}
+//     } else if (SEGMENT.fft3 >= 128) {
+//     	if (random8(3) == 0 || emptyScreen) {         // lower number == more frequent spawns
+//     	  uint8_t spawnX = random8(matrixHeight);
+//     	  leds[XY(0, spawnX)] = CRGB(175,255,175 );
+//     	  }
+//     }
 
-   for (int i=0; i<SEGLEN; i++) {
-      setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
-   }
-  } // if millis
+//    for (int i=0; i<SEGLEN; i++) {
+//       setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
+//    }
+//   } // if millis
 
 #else
   fade_out(224);
@@ -5141,59 +5164,59 @@ uint16_t WS2812FX::mode_2Dmatrix(void) {      // Matrix2D. By Jeremy Williams. A
 uint16_t WS2812FX::mode_2Dmeatballs(void) {   // Metaballs by Stefan Petrick. Cannot have one of the dimensions be 2 or less. Adapted by Andrew Tuline.
 #ifdef ESP32
 
-  if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}    // No, we're not going to overrun the segment.
+//   if (matrixWidth * matrixHeight > SEGLEN) {return blink(CRGB::Red, CRGB::Black, false, false);}    // No, we're not going to overrun the segment.
 
-  CRGB *leds = (CRGB* )ledData;
+//   CRGB *leds = (CRGB* )ledData;
 
-  float speed = 1;
+//   float speed = 1;
 
-  // get some 2 random moving points
-  uint8_t x2 = inoise8(millis() * speed, 25355, 685 ) / 16;
-  uint8_t y2 = inoise8(millis() * speed, 355, 11685 ) / 16;
+//   // get some 2 random moving points
+//   uint8_t x2 = inoise8(millis() * speed, 25355, 685 ) / 16;
+//   uint8_t y2 = inoise8(millis() * speed, 355, 11685 ) / 16;
 
-  uint8_t x3 = inoise8(millis() * speed, 55355, 6685 ) / 16;
-  uint8_t y3 = inoise8(millis() * speed, 25355, 22685 ) / 16;
+//   uint8_t x3 = inoise8(millis() * speed, 55355, 6685 ) / 16;
+//   uint8_t y3 = inoise8(millis() * speed, 25355, 22685 ) / 16;
 
-  // and one Lissajou function
-  uint8_t x1 = beatsin8(23 * speed, 0, 15);
-  uint8_t y1 = beatsin8(28 * speed, 0, 15);
+//   // and one Lissajou function
+//   uint8_t x1 = beatsin8(23 * speed, 0, 15);
+//   uint8_t y1 = beatsin8(28 * speed, 0, 15);
 
-  for (uint8_t y = 0; y < matrixHeight; y++) {
-    for (uint8_t x = 0; x < matrixWidth; x++) {
+//   for (uint8_t y = 0; y < matrixHeight; y++) {
+//     for (uint8_t x = 0; x < matrixWidth; x++) {
 
-      // calculate distances of the 3 points from actual pixel
-      // and add them together with weightening
-      uint8_t  dx =  abs(x - x1);
-      uint8_t  dy =  abs(y - y1);
-      uint8_t dist = 2 * sqrt((dx * dx) + (dy * dy));
+//       // calculate distances of the 3 points from actual pixel
+//       // and add them together with weightening
+//       uint8_t  dx =  abs(x - x1);
+//       uint8_t  dy =  abs(y - y1);
+//       uint8_t dist = 2 * sqrt((dx * dx) + (dy * dy));
 
-      dx =  abs(x - x2);
-      dy =  abs(y - y2);
-      dist += sqrt((dx * dx) + (dy * dy));
+//       dx =  abs(x - x2);
+//       dy =  abs(y - y2);
+//       dist += sqrt((dx * dx) + (dy * dy));
 
-      dx =  abs(x - x3);
-      dy =  abs(y - y3);
-      dist += sqrt((dx * dx) + (dy * dy));
+//       dx =  abs(x - x3);
+//       dy =  abs(y - y3);
+//       dist += sqrt((dx * dx) + (dy * dy));
 
-      // inverse result
-      byte color = 1000 / dist;
+//       // inverse result
+//       byte color = 1000 / dist;
 
-      // map color between thresholds
-      if (color > 0 and color < 60) {
-        leds[XY(x, y)] = ColorFromPalette(currentPalette, color * 9, 255);
-      } else {
-        leds[XY(x, y)] = ColorFromPalette(currentPalette, 0, 255);
-      }
-        // show the 3 points, too
-        leds[XY(x1,y1)] = CRGB(255, 255,255);
-        leds[XY(x2,y2)] = CRGB(255, 255,255);
-        leds[XY(x3,y3)] = CRGB(255, 255,255);
-    }
-  }
+//       // map color between thresholds
+//       if (color > 0 and color < 60) {
+//         leds[XY(x, y)] = ColorFromPalette(currentPalette, color * 9, 255);
+//       } else {
+//         leds[XY(x, y)] = ColorFromPalette(currentPalette, 0, 255);
+//       }
+//         // show the 3 points, too
+//         leds[XY(x1,y1)] = CRGB(255, 255,255);
+//         leds[XY(x2,y2)] = CRGB(255, 255,255);
+//         leds[XY(x3,y3)] = CRGB(255, 255,255);
+//     }
+//   }
 
-   for (int i=0; i<SEGLEN; i++) {
-      setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
-   }
+//    for (int i=0; i<SEGLEN; i++) {
+//       setPixelColor(i, leds[i].red, leds[i].green, leds[i].blue);
+//    }
 
 #else
   fade_out(224);

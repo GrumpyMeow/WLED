@@ -368,7 +368,7 @@ bool WS2812FX::setEffectConfig(uint8_t m, uint8_t s, uint8_t in, uint8_t f1, uin
     setMode(mainSegment, m);
   }
 
-  if (seg.mode != modePrev || seg.speed != speedPrev || seg.intensity != intensityPrev || seg.fft1 != fft1Prev || seg.fft2 != fft2Prev || seg.fft3 != fft3Prev || seg.palette != palettePrev ) return true;
+  if (seg.mode != modePrev || seg.speed != speedPrev || seg.intensity != intensityPrev || seg.fft1 != fft1Prev || seg.fft2 != fft2Prev || seg.fft3 != fft3Prev || seg.palette != palettePrev) return true;
   return false;
 }
 
@@ -856,7 +856,7 @@ void WS2812FX::handle_palette(void)
       {
         targetPalette = PartyColors_p; break; //fallback
       }
-      if (millis() - _lastPaletteChange > 1000 + ((uint32_t)(255-SEGMENT.getIntensity()))*100)
+      if (millis() - _lastPaletteChange > 1000 + ((uint32_t)(255-getIntensity()))*100)
       {
         targetPalette = CRGBPalette16(
                         CHSV(random8(), 255, random8(128, 255)),
@@ -951,6 +951,8 @@ bool WS2812FX::segmentsAreIdentical(Segment* a, Segment* b)
   if (a->fft2 != b->fft2) return false;
   if (a->fft3 != b->fft3) return false;
   if (a->palette != b->palette) return false;
+  if (a->reactive != b->reactive) return false;
+  //if (a->getOption(SEG_OPTION_REACTIVE) != b->getOption(SEG_OPTION_REACTIVE)) return false;
   //if (a->getOption(SEG_OPTION_REVERSED) != b->getOption(SEG_OPTION_REVERSED)) return false;
   return true;
 }

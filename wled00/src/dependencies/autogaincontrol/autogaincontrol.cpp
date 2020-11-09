@@ -17,7 +17,7 @@ int autogaincontrol::process(int micIn) {
   int sampleAdj = ((result * sampleGain) / 40) + (result / 16); // Adjust the gain.
   prevAmplitude = min(sampleAdj, 255);;                         // We'll now make our rebase our sample to be adjusted.
 
-  sampleAvg = ((sampleAvg * 15) + sampleAdj) / 16;       			// Smooth it out over the last 16 samples.
+  sampleAvg = ((sampleAvg * 15) + sampleAdj) / 16;       			// Smooth it out over the last samples.
   
   multAgc = (sampleAvg < 1) ? targetAgc : targetAgc / sampleAvg;// Make the multiplier so that sampleAvg * multiplier = setpoint
 

@@ -79,7 +79,7 @@ void deserializeSegment(JsonObject elem, byte it)
     seg.setOption(SEG_OPTION_SELECTED, elem[F("sel")] | seg.getOption(SEG_OPTION_SELECTED));
     seg.setOption(SEG_OPTION_REVERSED, elem[F("rev")] | seg.getOption(SEG_OPTION_REVERSED));
     seg.setOption(SEG_OPTION_MIRROR  , elem[F("mi")]  | seg.getOption(SEG_OPTION_MIRROR  ));
-    seg.setOption(SEG_OPTION_REACTIVE , elem[F("re")]  | seg.getOption(SEG_OPTION_REACTIVE ));
+    seg.setOption(SEG_OPTION_REACTIVE , elem[F("re")] | seg.getOption(SEG_OPTION_REACTIVE ));
 
     //temporary, strip object gets updated via colorUpdated()
     if (id == strip.getMainSegmentId()) {
@@ -265,6 +265,7 @@ void serializeSegment(JsonObject& root, WS2812FX::Segment& seg, byte id)
   root[F("grp")] = seg.grouping;
   root[F("spc")] = seg.spacing;
   root["on"] = seg.getOption(SEG_OPTION_ON);
+  root["re"] = seg.getOption(SEG_OPTION_REACTIVE);
   byte segbri = seg.opacity;
   root["bri"] = (segbri) ? segbri : 255;
 

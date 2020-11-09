@@ -110,6 +110,7 @@ void handleSettingsSet(AsyncWebServerRequest *request, byte subPage)
     t = request->arg(F("PB")).toInt();
     if (t >= 0 && t < 4) strip.paletteBlend = t;
     strip.reverseMode = request->hasArg(F("RV"));
+    Serial.printf("113 %d",request->hasArg(F("RE")));
     strip.reactiveEffects = request->hasArg(F("RE"));
     skipFirstLed = request->hasArg(F("SL"));
     t = request->arg(F("BF")).toInt();
