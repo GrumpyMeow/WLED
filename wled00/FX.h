@@ -27,7 +27,12 @@
 #ifndef WS2812FX_h
 #define WS2812FX_h
 
-#include "NpbWrapper.h"
+#ifdef ESP32_MULTISTRIP
+  #include "../usermods/esp32_multistrip/NpbWrapper.h"
+#else
+  #include "NpbWrapper.h"
+#endif
+
 #include "const.h"
 
 #define FASTLED_INTERNAL //remove annoying pragma messages
@@ -40,8 +45,12 @@
 #define DEFAULT_INTENSITY  (uint8_t)128
 #define DEFAULT_COLOR      (uint32_t)0xFFAA00
 
+#ifndef MIN
 #define MIN(a,b) ((a)<(b)?(a):(b))
+#endif
+#ifndef MAX
 #define MAX(a,b) ((a)>(b)?(a):(b))
+#endif
 
 /* Not used in all effects yet */
 #define WLED_FPS         42
@@ -50,9 +59,9 @@
 /* each segment uses 52 bytes of SRAM memory, so if you're application fails because of
   insufficient memory, decreasing MAX_NUM_SEGMENTS may help */
 #ifdef ESP8266
-  #define MAX_NUM_SEGMENTS 10
+  #define MAX_NUM_SEGMENTS 12
 #else
-  #define MAX_NUM_SEGMENTS 10
+  #define MAX_NUM_SEGMENTS 16
 #endif
 
 /* How much data bytes all segments combined may allocate */
@@ -107,7 +116,7 @@
 #define IS_REVERSE      ((SEGMENT.options & REVERSE     ) == REVERSE     )
 #define IS_SELECTED     ((SEGMENT.options & SELECTED    ) == SELECTED    )
 
-#define MODE_COUNT  114
+#define MODE_COUNT  116
 
 #define FX_MODE_STATIC                   0
 #define FX_MODE_BLINK                    1
@@ -223,6 +232,8 @@
 #define FX_MODE_CHUNCHUN               111
 #define FX_MODE_DANCING_SHADOWS        112
 #define FX_MODE_WASHING_MACHINE        113
+#define FX_MODE_CANDY_CANE             114
+#define FX_MODE_BLENDS                 115
 
 class WS2812FX {
   typedef uint16_t (WS2812FX::*mode_ptr)(void);
@@ -307,9 +318,31 @@ class WS2812FX {
         WS2812FX::_usedSegmentData -= _dataLen;
         _dataLen = 0;
       }
-      void reset(){next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0; deallocateData();}
+
+      /** 
+       * If reset of this segment was request, clears runtime
+       * settings of this segment.
+       * Must not be called while an effect mode function is running
+       * because it could access the data buffer and this method 
+       * may free that data buffer.
+       */
+      void resetIfRequired() {
+        if (_requiresReset) {
+          next_time = 0; step = 0; call = 0; aux0 = 0; aux1 = 0; 
+          deallocateData();
+          _requiresReset = false;
+        }
+      }
+
+      /** 
+       * Flags that before the next effect is calculated,
+       * the internal segment state should be reset. 
+       * Call resetIfRequired before calling the next effect function.
+       */
+      void reset() { _requiresReset = true; }
       private:
         uint16_t _dataLen = 0;
+        bool _requiresReset = false;
     } segment_runtime;
 
     WS2812FX() {
@@ -428,6 +461,8 @@ class WS2812FX {
       _mode[FX_MODE_CHUNCHUN]                = &WS2812FX::mode_chunchun;
       _mode[FX_MODE_DANCING_SHADOWS]         = &WS2812FX::mode_dancing_shadows;
       _mode[FX_MODE_WASHING_MACHINE]         = &WS2812FX::mode_washing_machine;
+      _mode[FX_MODE_CANDY_CANE]              = &WS2812FX::mode_candy_cane;
+      _mode[FX_MODE_BLENDS]                  = &WS2812FX::mode_blends;
 
       _brightness = DEFAULT_BRIGHTNESS;
       currentPalette = CRGBPalette16(CRGB::Black);
@@ -452,6 +487,7 @@ class WS2812FX {
       setRange(uint16_t i, uint16_t i2, uint32_t col),
       setShowCallback(show_callback cb),
       setTransitionMode(bool t),
+      calcGammaTable(float),
       trigger(void),
       setSegment(uint8_t n, uint16_t start, uint16_t stop, uint8_t grouping = 0, uint8_t spacing = 0),
       resetSegments(),
@@ -459,6 +495,7 @@ class WS2812FX {
       setPixelColor(uint16_t n, uint8_t r, uint8_t g, uint8_t b, uint8_t w = 0),
       show(void),
       setRgbwPwm(void),
+      setColorOrder(uint8_t co),
       setPixelSegment(uint8_t n);
 
     bool
@@ -467,14 +504,15 @@ class WS2812FX {
       gammaCorrectCol = true,
       applyToAllSelected = true,
       segmentsAreIdentical(Segment* a, Segment* b),
-      setEffectConfig(uint8_t m, uint8_t s, uint8_t i, uint8_t p);
+      setEffectConfig(uint8_t m, uint8_t s, uint8_t i, uint8_t p),
+      // return true if the strip is being sent pixel updates
+      isUpdating(void);
 
     uint8_t
       mainSegment = 0,
       rgbwMode = RGBW_MODE_DUAL,
       paletteFade = 0,
       paletteBlend = 0,
-      colorOrder = 0,
       milliampsPerLed = 55,
       getBrightness(void),
       getMode(void),
@@ -484,7 +522,9 @@ class WS2812FX {
       getMaxSegments(void),
       //getFirstSelectedSegment(void),
       getMainSegmentId(void),
+      getColorOrder(void),
       gamma8(uint8_t),
+      gamma8_cal(uint8_t, float),
       get_random_wheel_index(uint8_t);
 
     int8_t
@@ -631,7 +671,9 @@ class WS2812FX {
       mode_flow(void),
       mode_chunchun(void),
       mode_dancing_shadows(void),
-      mode_washing_machine(void);
+      mode_washing_machine(void),
+      mode_candy_cane(void),
+      mode_blends(void);
 
   private:
     NeoPixelWrapper *bus;
@@ -650,6 +692,7 @@ class WS2812FX {
     void handle_palette(void);
 
     bool
+      shouldStartBus = false,
       _useRgbw = false,
       _skipFirstMode,
       _triggered;
@@ -718,7 +761,7 @@ const char JSON_mode_names[] PROGMEM = R"=====([
 "Twinklefox","Twinklecat","Halloween Eyes","Solid Pattern","Solid Pattern Tri","Spots","Spots Fade","Glitter","Candle","Fireworks Starburst",
 "Fireworks 1D","Bouncing Balls","Sinelon","Sinelon Dual","Sinelon Rainbow","Popcorn","Drip","Plasma","Percent","Ripple Rainbow",
 "Heartbeat","Pacifica","Candle Multi", "Solid Glitter","Sunrise","Phased","Twinkleup","Noise Pal", "Sine","Phased Noise",
-"Flow","Chunchun","Dancing Shadows","Washing Machine"
+"Flow","Chunchun","Dancing Shadows","Washing Machine","Candy Cane","Blends"
 ])=====";
 
 
@@ -728,7 +771,7 @@ const char JSON_palette_names[] PROGMEM = R"=====([
 "Pastel","Sunset 2","Beech","Vintage","Departure","Landscape","Beach","Sherbet","Hult","Hult 64",
 "Drywet","Jul","Grintage","Rewhi","Tertiary","Fire","Icefire","Cyane","Light Pink","Autumn",
 "Magenta","Magred","Yelmag","Yelblu","Orange & Teal","Tiamat","April Night","Orangery","C9","Sakura",
-"Aurora","Atlantica"
+"Aurora","Atlantica","C9 2","C9 New","Temperature"
 ])=====";
 
 #endif
