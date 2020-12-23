@@ -79,20 +79,35 @@ void userSetup()
   #endif
 
 
-  #ifdef ESP32
+  #ifdef ESP32  
     pinMode(LED_BUILTIN, OUTPUT);
 
     sampling_period_us = round(1000000*(1.0/SAMPLE_RATE));
 
-    // Define the FFT Task and lock it to core 0
-    xTaskCreatePinnedToCore(
-          FFTcode,                          // Function to implement the task
-          "FFT",                            // Name of the task
-          10000,                            // Stack size in words
-          NULL,                             // Task input parameter
-          1,                                // Priority of the task
-          &FFT_Task,                        // Task handle
-          0);                               // Core where the task should run
+    #ifdef ENABLE_CQT
+      cqt->init();
+      cqt->printFilters();  
+      
+      // Define the CQT Task and lock it to core 0
+      xTaskCreatePinnedToCore(
+            CQTcode,                          // Function to implement the task
+            "CQT",                            // Name of the task
+            10000,                            // Stack size in words
+            NULL,                             // Task input parameter
+            1,                                // Priority of the task
+            &CQT_Task,                        // Task handle
+            0);                               // Core where the task should run
+    #else
+      // Define the FFT Task and lock it to core 0
+      xTaskCreatePinnedToCore(
+            FFTcode,                          // Function to implement the task
+            "FFT",                            // Name of the task
+            10000,                            // Stack size in words
+            NULL,                             // Task input parameter
+            1,                                // Priority of the task
+            &FFT_Task,                        // Task handle
+            0);                               // Core where the task should run
+    #endif
   #endif
 }
 

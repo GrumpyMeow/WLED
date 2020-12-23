@@ -25,6 +25,8 @@
 */
 
 #include "FX.h"
+#include "src/dependencies/cqt/cqt.h"
+
 
 #define IBN 5100
 #define PALETTE_SOLID_WRAP (paletteBlend == 1 || paletteBlend == 3)
@@ -4122,7 +4124,10 @@ uint16_t WS2812FX::mode_ripplepeak(void) {                    // * Ripple peak. 
 #ifdef ESP32
 extern double FFT_MajorPeak;
 extern double FFT_Magnitude;
-extern double fftBin[];                     // raw FFT data
+#ifdef ENABLE_CQT
+#else
+  extern double fftBin[];                     // raw FFT data
+#endif
 extern double fftResult[];                  // summary of bins array. 16 summary bins.
 extern double beat;
 extern uint16_t lastSample;
@@ -4187,31 +4192,52 @@ uint16_t WS2812FX::mode_binmap(void) {        // Binmap. Scale bins to SEGLEN. B
 
 #ifdef ESP32
 
-  #define FIRSTBIN 3                          // The first 3 bins are garbage.
-  #define LASTBIN 255                         // Don't use the highest bins, as they're (almost) a mirror of the first 256.
+  #ifdef ENABLE_CQT
+    for (int i=0; i<SEGLEN; i++) {
+     
+      int sumBin = fftResult[(i/2) % NRBANDS]; // TODO: temporary implementation
+      if (sumBin>0)
+      {
+        sumBin = log(1+sumBin)*3.0f;
+      } else {
+        sumBin = 0;
+      }
+      
 
-  float maxVal = 5000;                        // Kind of a guess as to the maximum output value per combined and normalized (but not mapped) bins.
+      uint8_t bright = constrain(sumBin,0,255);   // Map the brightness in relation to maxVal and crunch to 8 bits.
+      if ((i >> 1) > NRBANDS) {bright=0;}
 
-  for (int i=0; i<SEGLEN; i++) {
+      setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(i*4+160, false, PALETTE_SOLID_WRAP, 0), bright));   // 'i' is just an index in the palette. The FFT value, bright, is the intensity.
+                                                                                                                      // The +160 is 'blue' for the Rainbow palette.
+    } // for i
 
-    uint16_t startBin = FIRSTBIN+i*LASTBIN/SEGLEN;             // This is the START bin for this particular pixel.
-    uint16_t   endBin = FIRSTBIN+(i+1)*LASTBIN/SEGLEN;         // This is the END bin for this particular pixel.
+  #else
 
-    double sumBin = 0;
+    #define FIRSTBIN 3                          // The first 3 bins are garbage.
+    #define LASTBIN 255                         // Don't use the highest bins, as they're (almost) a mirror of the first 256.
 
-    for (int j=startBin; j<=endBin; j++) sumBin += fftBin[j];
+    float maxVal = 5000;                        // Kind of a guess as to the maximum output value per combined and normalized (but not mapped) bins.
 
-    sumBin = sumBin/(endBin-startBin+1);                // Normalize it.
-    sumBin = sumBin * (i+5) / (endBin-startBin+5);      // Disgusting frequency adjustment calculation. Lows were too bright. Am open to quick 'n dirty alternatives.
+    for (int i=0; i<SEGLEN; i++) {
 
-    if (sumBin > maxVal) sumBin = maxVal;               // Make sure our bin isn't higher than the max . . which we capped earlier.
+      uint16_t startBin = FIRSTBIN+i*LASTBIN/SEGLEN;             // This is the START bin for this particular pixel.
+      uint16_t   endBin = FIRSTBIN+(i+1)*LASTBIN/SEGLEN;         // This is the END bin for this particular pixel.
 
-    uint8_t bright = constrain(mapf(sumBin, 0, maxVal, 0, 255),0,255);   // Map the brightness in relation to maxVal and crunch to 8 bits.
+      double sumBin = 0;
 
-    setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(i*4+160, false, PALETTE_SOLID_WRAP, 0), bright));   // 'i' is just an index in the palette. The FFT value, bright, is the intensity.
-                                                                                                                     // The +160 is 'blue' for the Rainbow palette.
-  } // for i
+      for (int j=startBin; j<=endBin; j++) sumBin += fftBin[j];
 
+      sumBin = sumBin/(endBin-startBin+1);                // Normalize it.
+      sumBin = sumBin * (i+5) / (endBin-startBin+5);      // Disgusting frequency adjustment calculation. Lows were too bright. Am open to quick 'n dirty alternatives.
+
+      if (sumBin > maxVal) sumBin = maxVal;               // Make sure our bin isn't higher than the max . . which we capped earlier.
+
+      uint8_t bright = constrain(mapf(sumBin, 0, maxVal, 0, 255),0,255);   // Map the brightness in relation to maxVal and crunch to 8 bits.
+
+      setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(i*4+160, false, PALETTE_SOLID_WRAP, 0), bright));   // 'i' is just an index in the palette. The FFT value, bright, is the intensity.
+                                                                                                                      // The +160 is 'blue' for the Rainbow palette.
+    } // for i
+  #endif
 #else
   fade_out(224);
 #endif // ESP8266

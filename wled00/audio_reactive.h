@@ -7,6 +7,8 @@
 
 #include "wled.h"
 
+#define ENABLE_CQT
+
 //#define FFT_SAMPLING_LOG
 //#define MIC_SAMPLING_LOG
 
@@ -21,10 +23,15 @@
   const int BLOCK_SIZE = 64;
 #endif
 
-const int SAMPLE_RATE = 10240; // was 16000 for digital mic
+const int SAMPLE_RATE = 44100; // was 16000 for digital mic
 
 #ifdef ESP32
-  TaskHandle_t FFT_Task;
+  #ifdef ENABLE_CQT
+    TaskHandle_t CQT_Task;
+    #include "src/dependencies/cqt/cqt.h"
+  #else
+    TaskHandle_t FFT_Task;
+  #endif
 #endif
 
 //Use userVar0 and userVar1 (API calls &U0=,&U1=, uint16_t)
@@ -78,7 +85,7 @@ struct audioSyncPacket {
   int sample;             //  04 Bytes
   float sampleAvg;        //  04 Bytes
   bool samplePeak;        //  01 Bytes
-  uint8_t fftResult[16];  //  16 Bytes
+  uint8_t fftResult[NRBANDS];  //  16 Bytes
   double FFT_Magnitude;   //  08 Bytes
   double FFT_MajorPeak;   //  08 Bytes
 };
@@ -152,7 +159,7 @@ void agcAvg() {                                                     // A simple 
 
 #ifdef ESP32
 
-  #include "arduinoFFT.h"
+  
 
   void transmitAudioData()
   {
@@ -178,7 +185,7 @@ void agcAvg() {                                                     // A simple 
     transmitData.samplePeak = udpSamplePeak;
     udpSamplePeak = 0;                              // Reset udpSamplePeak after we've transmitted it
 
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < NRBANDS; i++) {
       transmitData.fftResult[i] = (uint8_t)constrain(fftResult[i], 0, 254);
     }
 
@@ -191,123 +198,173 @@ void agcAvg() {                                                     // A simple 
     return;
   }  // transmitAudioData()
 
-  const uint16_t samples = 512;                     // This value MUST ALWAYS be a power of 2
+  const uint16_t samples = 1024;                     // This value MUST ALWAYS be a power of 2
   // The line below was replaced by  'const int SAMPLE_RATE = 10240'
   //const double samplingFrequency = 10240;           // Sampling frequency in Hz
   unsigned int sampling_period_us;
   unsigned long microseconds;
 
+  double fftResult[NRBANDS];
   double FFT_MajorPeak = 0;
   double FFT_Magnitude = 0;
-  uint16_t mAvg = 0;
 
-  // These are the input and output vectors.  Input vectors receive computed results from FFT.
-  double vReal[samples];
-  double vImag[samples];
-  double fftBin[samples];
-  double fftResult[16];
+  #ifdef ENABLE_CQT
+    
 
-  // This is used for normalization of the result bins. It was created by sending the results of a signal generator to within 6" of a MAX9814 @ 40db gain.
-  // This is the maximum raw results for each of the result bins and is used for normalization of the results.
-  long maxChannel[] = {26000,  44000,  66000,  72000,  60000,  48000,  41000,  30000,  25000, 22000, 16000,  14000,  10000,  8000,  7000,  5000}; // Find maximum value for each bin with MAX9814 @ 40db gain.
+    CQT* cqt = new CQT();
 
-  float avgChannel[16];    // This is a smoothed rolling average value for each bin. Experimental for AGC testing.
+    // CQT main code
+    void CQTcode( void * parameter) {
+      uint16_t rawMicData = 0;
 
-  // Create FFT object
-  arduinoFFT FFT = arduinoFFT( vReal, vImag, samples, SAMPLE_RATE );
+      for(;;) {
+        delay(1);           // DO NOT DELETE THIS LINE! It is needed to give the IDLE(0) task enough time and to keep the watchdog happy.
+        microseconds = micros();
 
-  double fftAdd( int from, int to) {
-    int i = from;
-    double result = 0;
-    while ( i <= to) {
-      result += fftBin[i++];
-    }
-    return result;
-  }
-
-  // FFT main code
-  void FFTcode( void * parameter) {
-    double beatSample = 0;
-    double envelope = 0;
-    uint16_t rawMicData = 0;
-
-    for(;;) {
-      delay(1);           // DO NOT DELETE THIS LINE! It is needed to give the IDLE(0) task enough time and to keep the watchdog happy.
-      microseconds = micros();
-      extern double volume;
-
-      for(int i=0; i<samples; i++) {
-
-        if (digitalMic == false) {
-          micData = analogRead(MIC_PIN);                      // Analog Read
-          rawMicData = micData >> 2;                          // ESP32 has 12 bit ADC
-        } else {
+        for(int i=0; i<samples; i++) {
           int32_t digitalSample = 0;
-          int bytes_read = i2s_pop_sample(I2S_PORT, (char *)&digitalSample, portMAX_DELAY); // no timeout
-          if (bytes_read > 0) {
-            micData = abs(digitalSample >> 16);
-            // Serial.println(micData);
-            rawMicData = micData;
-          } // ESP32 has 12 bit ADC
+
+          if (digitalMic == false) {
+            micData = analogRead(MIC_PIN);                      // Analog Read
+            rawMicData = micData >> 2;                          // ESP32 has 12 bit ADC
+          } else {
+            int bytes_read = i2s_pop_sample(I2S_PORT, (char *)&digitalSample, portMAX_DELAY); // no timeout
+            if (bytes_read > 0) {
+              micData = abs(digitalSample >> 16);
+              rawMicData = micData;
+            } 
+          }
+
+          cqt->sampleIndex++;  
+          cqt->signal[(cqt->sampleIndex) % NRSAMPLES] = (digitalSample >> 16);
+          cqt->signal_lowfreq[(cqt->sampleIndex / LOWFREQDIV) % NRSAMPLES] = (digitalSample >> 16);
+
+          while(micros() - microseconds < sampling_period_us){
+            //empty loop
+          }
+          microseconds += sampling_period_us;
         }
 
-        vReal[i] = micData;                                   // Store Mic Data in an array
-        vImag[i] = 0;
+        cqt->cqt();
 
-        while(micros() - microseconds < sampling_period_us){
-          //empty loop
-          }
-        microseconds += sampling_period_us;
+        for (uint8_t band=0;band<NRBANDS;band++) {        
+          fftResult[band] = cqt->bandEnergy[band];
+        }
       }
+    }  // CQTcode( void * parameter)
 
-      FFT.Windowing( FFT_WIN_TYP_HAMMING, FFT_FORWARD );      // Weigh data
-      FFT.Compute( FFT_FORWARD );                             // Compute FFT
-      FFT.ComplexToMagnitude();                               // Compute magnitudes
+  #else
+    #include "arduinoFFT.h"
+    
+    uint16_t mAvg = 0;
 
-      //
-      // vReal[3 .. 255] contain useful data, each a 20Hz interval (60Hz - 5120Hz).
-      // There could be interesting data at bins 0 to 2, but there are too many artifacts.
-      //
-      FFT.MajorPeak(&FFT_MajorPeak, &FFT_Magnitude);          // let the effects know which freq was most dominant
-      FFT.DCRemoval();
+    // These are the input and output vectors.  Input vectors receive computed results from FFT.
+    double vReal[samples];
+    double vImag[samples];
+    double fftBin[samples];
 
-      for (int i = 0; i < samples; i++) fftBin[i] = vReal[i]; // export FFT field
 
-// Andrew's updated mapping of 256 bins down to the 16 result bins with Sample Freq = 10240, samples = 512.
-// Based on testing, the lowest/Start frequency is 60 Hz (with bin 3) and a highest/End frequency of 5120 Hz in bin 255.
-// Now, Take the 60Hz and multiply by 1.320367784 to get the next frequency and so on until the end. Then detetermine the bins.
-// End frequency = Start frequency * multiplier ^ 16
-// Multiplier = (End frequency/ Start frequency) ^ 1/16
-// Multiplier = 1.320367784
+    // This is used for normalization of the result bins. It was created by sending the results of a signal generator to within 6" of a MAX9814 @ 40db gain.
+    // This is the maximum raw results for each of the result bins and is used for normalization of the results.
+    long maxChannel[] = {26000,  44000,  66000,  72000,  60000,  48000,  41000,  30000,  25000, 22000, 16000,  14000,  10000,  8000,  7000,  5000}; // Find maximum value for each bin with MAX9814 @ 40db gain.
 
-//                                                Range      |  Freq | Max vol on MAX9814 @ 40db gain.
-      fftResult[0] = (fftAdd(3,4)) /2;        // 60 - 100    -> 82Hz,  26000
-      fftResult[1] = (fftAdd(4,5)) /2;        // 80 - 120    -> 104Hz, 44000
-      fftResult[2] = (fftAdd(5,7)) /3;        // 100 - 160   -> 130Hz, 66000
-      fftResult[3] = (fftAdd(7,9)) /3;        // 140 - 200   -> 170,   72000
-      fftResult[4] = (fftAdd(9,12)) /4;       // 180 - 260   -> 220,   60000
-      fftResult[5] = (fftAdd(12,16)) /5;      // 240 - 340   -> 290,   48000
-      fftResult[6] = (fftAdd(16,21)) /6;      // 320 - 440   -> 400,   41000
-      fftResult[7] = (fftAdd(21,28)) /8;      // 420 - 600   -> 500,   30000
-      fftResult[8] = (fftAdd(29,37)) /10;     // 580 - 760   -> 580,   25000
-      fftResult[9] = (fftAdd(37,48)) /12;     // 740 - 980   -> 820,   22000
-      fftResult[10] = (fftAdd(48,64)) /17;    // 960 - 1300  -> 1150,  16000
-      fftResult[11] = (fftAdd(64,84)) /21;    // 1280 - 1700 -> 1400,  14000
-      fftResult[12] = (fftAdd(84,111)) /28;   // 1680 - 2240 -> 1800,  10000
-      fftResult[13] = (fftAdd(111,147)) /37;  // 2220 - 2960 -> 2500,  8000
-      fftResult[14] = (fftAdd(147,194)) /48;  // 2940 - 3900 -> 3500,  7000
-      fftResult[15] = (fftAdd(194, 255)) /62; // 3880 - 5120 -> 4500,  5000
+    float avgChannel[16];    // This is a smoothed rolling average value for each bin. Experimental for AGC testing.
 
-      for(int i=0; i< 16; i++) {
-        if(fftResult[i]<0) fftResult[i]=0;
-        avgChannel[i] = ((avgChannel[i] * 31) + fftResult[i]) / 32;                         // Smoothing of each result bin. Experimental.
-        fftResult[i] = constrain(map(fftResult[i], 0,  maxChannel[i], 0, 255),0,255);       // Map result bin to 8 bits.
-      //fftResult[i] = constrain(map(fftResult[i], 0,  avgChannel[i]*2, 0, 255),0,255);     // AGC map result bin to 8 bits. Can be noisy at low volumes. Experimental.
+    // Create FFT object
+    arduinoFFT FFT = arduinoFFT( vReal, vImag, samples, SAMPLE_RATE );
 
+    double fftAdd( int from, int to) {
+      int i = from;
+      double result = 0;
+      while ( i <= to) {
+        result += fftBin[i++];
       }
+      return result;
     }
-  }  // FFTcode( void * parameter)
 
+      // FFT main code
+      void FFTcode( void * parameter) {
+        double beatSample = 0;
+        double envelope = 0;
+        uint16_t rawMicData = 0;
+
+        for(;;) {
+          delay(1);           // DO NOT DELETE THIS LINE! It is needed to give the IDLE(0) task enough time and to keep the watchdog happy.
+          microseconds = micros();
+          extern double volume;
+
+          for(int i=0; i<samples; i++) {
+
+            if (digitalMic == false) {
+              micData = analogRead(MIC_PIN);                      // Analog Read
+              rawMicData = micData >> 2;                          // ESP32 has 12 bit ADC
+            } else {
+              int32_t digitalSample = 0;
+              int bytes_read = i2s_pop_sample(I2S_PORT, (char *)&digitalSample, portMAX_DELAY); // no timeout
+              if (bytes_read > 0) {
+                micData = abs(digitalSample >> 16);
+                // Serial.println(micData);
+                rawMicData = micData;
+              } // ESP32 has 12 bit ADC
+            }
+
+            vReal[i] = micData;                                   // Store Mic Data in an array
+            vImag[i] = 0;
+
+            while(micros() - microseconds < sampling_period_us){
+              //empty loop
+              }
+            microseconds += sampling_period_us;
+          }
+
+          FFT.Windowing( FFT_WIN_TYP_HAMMING, FFT_FORWARD );      // Weigh data
+          FFT.Compute( FFT_FORWARD );                             // Compute FFT
+          FFT.ComplexToMagnitude();                               // Compute magnitudes
+
+          //
+          // vReal[3 .. 255] contain useful data, each a 20Hz interval (60Hz - 5120Hz).
+          // There could be interesting data at bins 0 to 2, but there are too many artifacts.
+          //
+          FFT.MajorPeak(&FFT_MajorPeak, &FFT_Magnitude);          // let the effects know which freq was most dominant
+          FFT.DCRemoval();
+
+          for (int i = 0; i < samples; i++) fftBin[i] = vReal[i]; // export FFT field
+
+    // Andrew's updated mapping of 256 bins down to the 16 result bins with Sample Freq = 10240, samples = 512.
+    // Based on testing, the lowest/Start frequency is 60 Hz (with bin 3) and a highest/End frequency of 5120 Hz in bin 255.
+    // Now, Take the 60Hz and multiply by 1.320367784 to get the next frequency and so on until the end. Then detetermine the bins.
+    // End frequency = Start frequency * multiplier ^ 16
+    // Multiplier = (End frequency/ Start frequency) ^ 1/16
+    // Multiplier = 1.320367784
+
+    //                                                Range      |  Freq | Max vol on MAX9814 @ 40db gain.
+          fftResult[0] = (fftAdd(3,4)) /2;        // 60 - 100    -> 82Hz,  26000
+          fftResult[1] = (fftAdd(4,5)) /2;        // 80 - 120    -> 104Hz, 44000
+          fftResult[2] = (fftAdd(5,7)) /3;        // 100 - 160   -> 130Hz, 66000
+          fftResult[3] = (fftAdd(7,9)) /3;        // 140 - 200   -> 170,   72000
+          fftResult[4] = (fftAdd(9,12)) /4;       // 180 - 260   -> 220,   60000
+          fftResult[5] = (fftAdd(12,16)) /5;      // 240 - 340   -> 290,   48000
+          fftResult[6] = (fftAdd(16,21)) /6;      // 320 - 440   -> 400,   41000
+          fftResult[7] = (fftAdd(21,28)) /8;      // 420 - 600   -> 500,   30000
+          fftResult[8] = (fftAdd(29,37)) /10;     // 580 - 760   -> 580,   25000
+          fftResult[9] = (fftAdd(37,48)) /12;     // 740 - 980   -> 820,   22000
+          fftResult[10] = (fftAdd(48,64)) /17;    // 960 - 1300  -> 1150,  16000
+          fftResult[11] = (fftAdd(64,84)) /21;    // 1280 - 1700 -> 1400,  14000
+          fftResult[12] = (fftAdd(84,111)) /28;   // 1680 - 2240 -> 1800,  10000
+          fftResult[13] = (fftAdd(111,147)) /37;  // 2220 - 2960 -> 2500,  8000
+          fftResult[14] = (fftAdd(147,194)) /48;  // 2940 - 3900 -> 3500,  7000
+          fftResult[15] = (fftAdd(194, 255)) /62; // 3880 - 5120 -> 4500,  5000
+
+          for(int i=0; i< 16; i++) {
+            if(fftResult[i]<0) fftResult[i]=0;
+            avgChannel[i] = ((avgChannel[i] * 31) + fftResult[i]) / 32;                         // Smoothing of each result bin. Experimental.
+            fftResult[i] = constrain(map(fftResult[i], 0,  maxChannel[i], 0, 255),0,255);       // Map result bin to 8 bits.
+          //fftResult[i] = constrain(map(fftResult[i], 0,  avgChannel[i]*2, 0, 255),0,255);     // AGC map result bin to 8 bits. Can be noisy at low volumes. Experimental.
+
+          }
+        }
+      }  // FFTcode( void * parameter)
+  #endif
 #endif
 
 void logAudio() {
