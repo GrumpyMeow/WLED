@@ -65,7 +65,6 @@ void CQT::printFilters() {
 
 void CQT::preprocess_filters() {
     float nn = powf(2, log(Fmax / (double) F0) / log(2) / (double)NRBANDS);
-    twoPiQ = int2PI * (nn + 1) / (nn - 1) / 2;
 
     int band;
     // calculating the border frequencies
@@ -97,78 +96,46 @@ void CQT::preprocess_filters() {
     }
 }
 
-// Q-pos for quarter circle (=FullCircle/4) = 11
-#define qN (QPOSCIRCLE - 2)
-
-// A : Q-pos for output
-#define qA PRECISION
-
-// p : Q-pos for parentheses intermediate (15)
-#define qP 15
-
-// r = 2n-p (7)
-#define qR (2*qN-qP)
-
-// s = A-1-p-n (17)
-#define qS (qN+qP+1-qA)
-
-// Returns in range of 0..1024 
-fixedpoint CQT::approxSin(int x) {
-    // S(x) = x * ( (3<<p) - (x*x>>r) ) >> s
-
-    x = x << (30 - qN);		// resize to pi range
-    // shift to full s32 range (Q13->Q30)
-
-    if ((x ^ (x << 1)) < 0)	// test for quadrant 1 or 2
-	x = (1 << 31) - x;
-
-    x = x >> (30 - qN);
-    return (x * ((3 << qP) - (x * x >> qR)) >> qS);
-}
-
-// Returns in range of 0..1024 
-fixedpoint CQT::approxCos(fixedpoint in) {
-    return approxSin((int2PI >> 2) - in);
-}
-
-// Returns values in range of 0..1024
-fixedpoint CQT::hamming(int m, int k) {
-	return ALPHA - (BETA * approxCos(int2PI * m / NFreq[k]) >> PRECISION);
+float CQT::hamming(int m, int k) {
+	auto const a = 25.0 / 46.0;
+	return a - (1-a) * cosf(TAU * m) / NFreq[k];
 }
 
 void CQT::cqt() {
     unsigned int k, i, indx;
-    int windowed, angle;
+    float windowed;
+	float angle;
     float real_f, imag_f;
-    fixedpoint real, imag;
+    float real, imag;
     for (k = 0; k < lowfreqEndIndex; ++k) {
-	indx = sampleIndex % NRSAMPLES - 1 + 8 * NRSAMPLES;
-	real = ALPHA - (BETA * signal_lowfreq[indx % NRSAMPLES] >> PRECISION);
+	indx = sampleIndex % NRSAMPLES - 1 + 8 * NRSAMPLES; // this seems wrong
+	real = 0;
 	imag = 0;
-	for (i = 1; i < NFreq[k]; ++i) {
-	    windowed = hamming(i, k) * signal_lowfreq[(indx - i * Div[k]) % NRSAMPLES];
-	    angle = twoPiQ * i / NFreq[k];
-	    real += windowed * approxCos(angle) >> PRECISION;
-	    imag += windowed * approxSin(angle) >> PRECISION;
+	for (i = 0; i < NFreq[k]; ++i) {
+	    windowed = hamming(i, k) * (float)signal_lowfreq[(indx - i * Div[k]) % NRSAMPLES];
+	    angle = TAU * (float)i / (float)NFreq[k];
+	    real += windowed * cosf(angle);
+	    imag += windowed * sinf(angle);
 	}
 
-	real_f = real / (float) SCALE;
-	imag_f = imag / (float) SCALE;
-	bandEnergy[k] = powf(real_f * real_f + imag_f * imag_f, 0.5) / NFreq[k];
+	real_f = real ;
+	imag_f = imag ;
+	bandEnergy[k] = powf(real_f * real_f + imag_f * imag_f, 0.5) / (float)NFreq[k];
     }
+
     for (; k < NRBANDS; ++k) {
-	indx = sampleIndex % NRSAMPLES - 1 + 8 * NRSAMPLES;
-	real = ALPHA - (BETA * signal[indx % NRSAMPLES] >> PRECISION);
+	indx = sampleIndex % NRSAMPLES - 1 + 8 * NRSAMPLES; // this seems wrong
+	real=0;
 	imag = 0;
-	for (i = 1; i < NFreq[k]; ++i) {
-	    windowed = hamming(i, k) * signal[(indx - i * Div[k]) % NRSAMPLES];
-	    angle = twoPiQ * i / NFreq[k];
-	    real += windowed * approxCos(angle) >> PRECISION;
-	    imag += windowed * approxSin(angle) >> PRECISION;
+	for (i = 0; i < NFreq[k]; ++i) {
+	    windowed = hamming(i, k) * (float)signal[(indx - i * Div[k]) % NRSAMPLES];
+		angle = TAU * (float)i / (float)NFreq[k];
+	    real += windowed * cosf(angle);
+	    imag += windowed * sinf(angle);
 	}
-	real_f = real / (float) SCALE;
-	imag_f = imag / (float) SCALE;
-	bandEnergy[k] = powf(real_f * real_f + imag_f * imag_f, 0.5) / NFreq[k] ;
+	real_f = real ;
+	imag_f = imag ;
+	bandEnergy[k] = powf(real_f * real_f + imag_f * imag_f, 0.5) / (float)NFreq[k] ;
     }
 }
 

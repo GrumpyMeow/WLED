@@ -4195,10 +4195,10 @@ uint16_t WS2812FX::mode_binmap(void) {        // Binmap. Scale bins to SEGLEN. B
   #ifdef ENABLE_CQT
     for (int i=0; i<SEGLEN; i++) {
      
-      int sumBin = fftResult[(i/2) % NRBANDS]; // TODO: temporary implementation
+      int sumBin = 10.0f * fftResult[(i/2) % NRBANDS]; // TODO: temporary implementation
       if (sumBin>0)
       {
-        sumBin = log(1+sumBin)*3.0f;
+        //sumBin = log(1+sumBin)*3.0f;
       } else {
         sumBin = 0;
       }
