@@ -216,6 +216,7 @@ void agcAvg() {                                                     // A simple 
     // CQT main code
     void CQTcode( void * parameter) {
       uint16_t rawMicData = 0;
+      int lftot = 0;
 
       for(;;) {
         delay(1);           // DO NOT DELETE THIS LINE! It is needed to give the IDLE(0) task enough time and to keep the watchdog happy.
@@ -237,7 +238,16 @@ void agcAvg() {                                                     // A simple 
 
           cqt->sampleIndex++;  
           cqt->signal[(cqt->sampleIndex) % NRSAMPLES] = (digitalSample >> 16);
-          cqt->signal_lowfreq[(cqt->sampleIndex / LOWFREQDIV) % NRSAMPLES] = (digitalSample >> 16);
+          //cqt->signal_lowfreq[(cqt->sampleIndex / LOWFREQDIV) % NRSAMPLES] = (digitalSample >> 16);
+
+          
+          // Calculate average of last 8 samples
+          if (cqt->sampleIndex % LOWFREQDIV ==0) {            
+            cqt->signal_lowfreq[(cqt->sampleIndex / LOWFREQDIV) % NRSAMPLES] = lftot / LOWFREQDIV;
+            lftot = 0;
+          } else {
+            lftot += (digitalSample >> 16);
+          }
 
           while(micros() - microseconds < sampling_period_us){
             //empty loop
@@ -248,7 +258,8 @@ void agcAvg() {                                                     // A simple 
         cqt->cqt();
 
         for (uint8_t band=0;band<NRBANDS;band++) {        
-          fftResult[band] = cqt->bandEnergy[band];
+            fftResult[band] = cqt->bandEnergy[band] ;
+
         }
       }
     }  // CQTcode( void * parameter)

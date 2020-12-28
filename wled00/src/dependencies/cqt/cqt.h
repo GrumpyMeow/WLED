@@ -12,12 +12,12 @@
 #define ALPHA ((7<<PRECISION)/QPOSCIRCLE)	// 0.53836*(1<<PRECISION)       == 7168 / 13 = 551
 #define BETA ((6<<PRECISION)/QPOSCIRCLE)	// 1-0.53836*(1<<PRECISION)     == 6144 / 13 = 472
 #define SCALE (1<<PRECISION)      // == 1024
-#define NRBANDS 16                // Number of frequency bands to calculate
-#define FSAMPLE 44100             // SampleRate of input
+#define NRBANDS 32                // Number of frequency bands to calculate
+#define FSAMPLE 22050             // SampleRate of input
 #define LOWFREQBOUND 100           // Lower frequency of interest
-#define HIGHFREQBOUND 2000        // Upper frequency of interest
-#define NRSAMPLES 2048            // Size of samplebbufer
-#define MAXTOTALSAMPLES 4096      // Total number of samples sizeof(signal + signal_lowfreq)
+#define HIGHFREQBOUND 5000        // Upper frequency of interest
+#define NRSAMPLES 1024            // Size of samplebbufer
+#define MAXTOTALSAMPLES 2048      // Total number of samples sizeof(signal + signal_lowfreq)
 
 class CQT {
 public:

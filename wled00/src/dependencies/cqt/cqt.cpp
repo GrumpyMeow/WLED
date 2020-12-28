@@ -26,18 +26,18 @@ void CQT::adjustInputs(uint newLowFreq, uint newHighFreq) {
 
     uint minF = newLowFreq; 
     uint maxF = newHighFreq; 
-
-	float base = 1.0091;
-	minF = powf(base, minF);
-	maxF = powf(base, maxF);
+	
 	if (minF < LOWFREQBOUND) {
+		Serial.println("Adjusting minF");
 		minF = LOWFREQBOUND;
 	}
 	if (maxF > HIGHFREQBOUND) {
+		Serial.println("Adjusting maxF");
 		maxF = HIGHFREQBOUND;
 	}
 	if (2 * minF > maxF) {	// at least one octave will always be displayed.
 		if (2 * minF > HIGHFREQBOUND) {
+			Serial.println("Adjusting for octave");
 			maxF = HIGHFREQBOUND;
 			minF = HIGHFREQBOUND / 2;
 		} else {
@@ -45,6 +45,7 @@ void CQT::adjustInputs(uint newLowFreq, uint newHighFreq) {
 		}
 	}
 	if (maxF - minF < 60) {	// low frequencies must differ at least 60, so that the frequency width of each bucket is at least 2Hz. This prevents the number of samples needed to be larger than MAXSAMPLESIZE
+		Serial.println("Adjusting maxF for 2Hz buckets");
 		maxF = minF + 60;
 	}
 
@@ -57,10 +58,11 @@ void CQT::printFilters() {
 	Serial.println("Constant Q Transform bands:");
 	int band;
 	for (band = 0; band<NRBANDS-1;band++) {
-		if (band==lowfreqEndIndex) Serial.println("--- LOWFREQ sample-buffer used for above bands --- Normal sample-buffer used for below bands  ---");
-		Serial.printf("Band:%3d\t\t%5dHz - %5dHz\tDiv=%d\tNFreq=%d\n", band , Freq[band], Freq[band+1], Div[band], NFreq[band] );
+		if (band==lowfreqEndIndex) Serial.println("--- LOWFREQ sample-buffer used for above bands. Divider=+8. windowsize=+NRSAMPLES --- Normal sample-buffer used for below bands  ---");
+		
+		Serial.printf("Band:%3d\t\t%5dHz - %5dHz\tDiv=%d\tNFreq=%d\twindowsize=%d\n", band , Freq[band], Freq[band+1], Div[band], NFreq[band] , (NFreq[band] * Div[band]) );
 	}
-	Serial.printf("Band:%3d\t\t%5dHz - %5dHz\tDiv=%d\tNFreq=%d\n", band , Freq[band], Fmax , Div[band], NFreq[band] );
+	Serial.printf("Band:%3d\t\t%5dHz - %5dHz\tDiv=%d\tNFreq=%d\twindowsize=%d\n", band , Freq[band], Fmax , Div[band], NFreq[band] , (NFreq[band] * Div[band]));
 }
 
 void CQT::preprocess_filters() {
@@ -141,34 +143,51 @@ void CQT::cqt() {
     int windowed, angle;
     float real_f, imag_f;
     fixedpoint real, imag;
-    for (k = 0; k < lowfreqEndIndex; ++k) {
-	indx = sampleIndex % NRSAMPLES - 1 + 8 * NRSAMPLES;
-	real = ALPHA - (BETA * signal_lowfreq[indx % NRSAMPLES] >> PRECISION);
-	imag = 0;
-	for (i = 1; i < NFreq[k]; ++i) {
-	    windowed = hamming(i, k) * signal_lowfreq[(indx - i * Div[k]) % NRSAMPLES];
-	    angle = twoPiQ * i / NFreq[k];
-	    real += windowed * approxCos(angle) >> PRECISION;
-	    imag += windowed * approxSin(angle) >> PRECISION;
-	}
 
-	real_f = real / (float) SCALE;
-	imag_f = imag / (float) SCALE;
-	bandEnergy[k] = powf(real_f * real_f + imag_f * imag_f, 0.5) / NFreq[k];
+	// Have a low-frequency-signal to allow for smaller buffers. The signal is 8 times downsampled.
+    for (k = 0; k < lowfreqEndIndex; ++k) {
+		// Index of first sample to process. Process is reversed. Add NRSAMPLES to not go below 0 with index.
+		indx = ((sampleIndex / LOWFREQDIV) % NRSAMPLES);
+		real = 0;
+		imag = 0;
+		for (i = 0; i < NFreq[k]; ++i) {
+			int total = 0;
+			for (int skip = 0 ; skip < Div[k];skip++) {
+				total += signal_lowfreq[(indx - (skip + (i * Div[k]))) % NRSAMPLES];
+			}
+			total = (float)total / (float)Div[k];
+
+			windowed = hamming(i, k) * total ;
+			angle = twoPiQ * i / NFreq[k];
+			real += windowed * approxCos(angle) >> PRECISION;
+			imag += windowed * approxSin(angle) >> PRECISION;
+		}
+
+		real_f = real / (float) SCALE;
+		imag_f = imag / (float) SCALE;
+		bandEnergy[k] = 10.0f * powf(real_f * real_f + imag_f * imag_f, 0.5) / NFreq[k] ;
     }
+
     for (; k < NRBANDS; ++k) {
-	indx = sampleIndex % NRSAMPLES - 1 + 8 * NRSAMPLES;
-	real = ALPHA - (BETA * signal[indx % NRSAMPLES] >> PRECISION);
-	imag = 0;
-	for (i = 1; i < NFreq[k]; ++i) {
-	    windowed = hamming(i, k) * signal[(indx - i * Div[k]) % NRSAMPLES];
-	    angle = twoPiQ * i / NFreq[k];
-	    real += windowed * approxCos(angle) >> PRECISION;
-	    imag += windowed * approxSin(angle) >> PRECISION;
-	}
-	real_f = real / (float) SCALE;
-	imag_f = imag / (float) SCALE;
-	bandEnergy[k] = powf(real_f * real_f + imag_f * imag_f, 0.5) / NFreq[k] ;
+		// Index of first sample to process. Process is reversed. Add NRSAMPLES to not go below 0 with index.
+		indx = (sampleIndex % NRSAMPLES);
+		real = 0;
+		imag = 0;
+		for (i = 0; i < NFreq[k]; ++i) {
+			int total = 0;
+			for (int skip = 0 ; skip < Div[k];skip++) {
+				total += signal[(indx - (skip + (i * Div[k]))) % NRSAMPLES];
+			}
+			total = (float)total / (float)Div[k];
+			windowed = hamming(i, k) * total ;
+			
+			angle = twoPiQ * i / NFreq[k];
+			real += windowed * approxCos(angle) >> PRECISION;
+			imag += windowed * approxSin(angle) >> PRECISION;
+		}
+		real_f = real / (float) SCALE;
+		imag_f = imag / (float) SCALE;
+		bandEnergy[k] = 10.0f * powf(real_f * real_f + imag_f * imag_f, 0.5) / NFreq[k] ;
     }
 }
 

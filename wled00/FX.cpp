@@ -4195,17 +4195,17 @@ uint16_t WS2812FX::mode_binmap(void) {        // Binmap. Scale bins to SEGLEN. B
   #ifdef ENABLE_CQT
     for (int i=0; i<SEGLEN; i++) {
      
-      int sumBin = fftResult[(i/2) % NRBANDS]; // TODO: temporary implementation
+      int sumBin = fftResult[(i >> 1) % NRBANDS]; // TODO: temporary implementation
       if (sumBin>0)
       {
-        sumBin = log(1+sumBin)*3.0f;
+        
       } else {
         sumBin = 0;
       }
       
 
       uint8_t bright = constrain(sumBin,0,255);   // Map the brightness in relation to maxVal and crunch to 8 bits.
-      if ((i >> 1) > NRBANDS) {bright=0;}
+      if ((i >> 1) >= NRBANDS) {bright=0;}
 
       setPixelColor(i, color_blend(SEGCOLOR(1), color_from_palette(i*4+160, false, PALETTE_SOLID_WRAP, 0), bright));   // 'i' is just an index in the palette. The FFT value, bright, is the intensity.
                                                                                                                       // The +160 is 'blue' for the Rainbow palette.
